@@ -34,10 +34,9 @@ This system controls two Wantai 85BYGH450C-060 stepper motors using:
 
 | Teensy Pin | Function | Connects To |
 |------------|----------|-------------|
-| Pin 2 | PWM Output | Driver 1 - PUL+ |
-| Pin 3 | DIR Output | Driver 1 - DIR+ |
-| Pin 4 | ENABLE Output | Driver 1 - ENA+ |
-| GND | Ground | Driver 1 - PUL-, DIR-, ENA- |
+| Pin 0 | PWM/STEP Output | Driver 1 - PUL+ |
+| Pin 1 | DIR Output | Driver 1 - DIR+ |
+| GND | Ground | Driver 1 - PUL-, DIR- |
 | USB | Serial to RPi | Raspberry Pi USB port |
 | VIN | Power Input | 5V supply |
 | GND | Ground | Common ground |
@@ -46,10 +45,9 @@ This system controls two Wantai 85BYGH450C-060 stepper motors using:
 
 | Teensy Pin | Function | Connects To |
 |------------|----------|-------------|
-| Pin 2 | PWM Output | Driver 2 - PUL+ |
-| Pin 3 | DIR Output | Driver 2 - DIR+ |
-| Pin 4 | ENABLE Output | Driver 2 - ENA+ |
-| GND | Ground | Driver 2 - PUL-, DIR-, ENA- |
+| Pin 0 | PWM/STEP Output | Driver 2 - PUL+ |
+| Pin 1 | DIR Output | Driver 2 - DIR+ |
+| GND | Ground | Driver 2 - PUL-, DIR- |
 | USB | Serial to RPi | Raspberry Pi USB port |
 | VIN | Power Input | 5V supply |
 | GND | Ground | Common ground |
@@ -59,12 +57,12 @@ This system controls two Wantai 85BYGH450C-060 stepper motors using:
 #### Driver Control Signals (Both Drivers)
 | Driver Terminal | Signal | Source |
 |-----------------|--------|--------|
-| PUL+ | Step Pulse | Teensy Pin 2 |
+| PUL+ | Step Pulse | Teensy Pin 0 |
 | PUL- | Ground | Teensy GND |
-| DIR+ | Direction | Teensy Pin 3 |
+| DIR+ | Direction | Teensy Pin 1 |
 | DIR- | Ground | Teensy GND |
-| ENA+ | Enable | Teensy Pin 4 |
-| ENA- | Ground | Teensy GND |
+| ENA+ | (Not used) | Tie per driver manual for always-enabled |
+| ENA- | (Not used) | Tie per driver manual |
 
 #### Driver Power Connections (Both Drivers)
 | Driver Terminal | Connects To |
@@ -122,16 +120,16 @@ This creates a common ground reference for all signals.
 
 The driver has 8 DIP switches for microstep configuration:
 
-### Recommended Setting: 8 Microsteps
+### Recommended Setting: Full Step (1×)
 | SW1 | SW2 | SW3 | SW4 | SW5 | SW6 | SW7 | SW8 |
 |-----|-----|-----|-----|-----|-----|-----|-----|
-| OFF | ON  | ON  | x   | OFF | OFF | OFF | x   |
+| ON  | ON  | ON  | x   | Set current per motor | Set current per motor | Set current per motor | x |
 
 **Microstep options** (SW1-SW3):
-- SW1=ON, SW2=ON, SW3=ON: 1 (400 steps/rev)
-- SW1=OFF, SW2=ON, SW3=ON: 8 (1600 steps/rev) ← **Recommended**
-- SW1=ON, SW2=OFF, SW3=ON: 16 (3200 steps/rev)
-- SW1=ON, SW2=ON, SW3=OFF: 32 (6400 steps/rev)
+- SW1=ON, SW2=ON, SW3=ON: 1× (full step, 200 steps/rev) ← **Recommended**
+- SW1=OFF, SW2=ON, SW3=ON: 8× (1600 steps/rev)
+- SW1=ON, SW2=OFF, SW3=ON: 16× (3200 steps/rev)
+- SW1=ON, SW2=ON, SW3=OFF: 32× (6400 steps/rev)
 
 **Current Setting** (SW5-SW8): See driver manual for your motor's current rating.
 
@@ -205,7 +203,7 @@ Raspberry Pi GND ──┬── Teensy 1 GND ──── Driver 1 (PUL-, DIR-,
 
 ### Motors not moving
 - Check motor power supply voltage and connections
-- Verify driver enable pin is HIGH
+- If using ENA, ensure the driver's enable lines are tied for always-enabled per the driver manual (in this design ENA is not controlled by the Teensy)
 - Check PUL/DIR signal connections
 - Verify DIP switch settings
 

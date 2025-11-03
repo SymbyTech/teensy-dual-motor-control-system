@@ -15,13 +15,12 @@
 #include <Arduino.h>
 
 // Pin Definitions
-#define PWM_PIN 2     // Changed from 0 to avoid conflict with Serial
-#define DIR_PIN 3     // Changed from 1 to avoid conflict with Serial
-#define ENABLE_PIN 4  // Optional enable pin for driver
+#define PWM_PIN 0     // PWM/STEP output
+#define DIR_PIN 1     // DIR output
 
 // Motor Parameters
 #define STEPS_PER_REV 200
-#define MICROSTEPS 8          // Adjust based on driver DIP switch settings
+#define MICROSTEPS 1          // Full-step mode
 #define MAX_SPEED 20000       // Maximum steps/second
 #define MIN_SPEED 100         // Minimum steps/second
 #define ACCEL_RATE 5000       // Steps/second^2 acceleration
@@ -60,12 +59,10 @@ void setup() {
   // Initialize pins
   pinMode(PWM_PIN, OUTPUT);
   pinMode(DIR_PIN, OUTPUT);
-  pinMode(ENABLE_PIN, OUTPUT);
   pinMode(LED_BUILTIN, OUTPUT);
   
   digitalWrite(PWM_PIN, LOW);
   digitalWrite(DIR_PIN, LOW);
-  digitalWrite(ENABLE_PIN, HIGH); // Enable driver (active high)
   
   // Initialize Serial Communication
   Serial.begin(SERIAL_BAUD);
@@ -233,15 +230,6 @@ void processCommand(String cmd) {
     stopMotor();
     Serial.println("Motor reset");
     
-  } else if (command == "ENABLE" || command == "EN") {
-    digitalWrite(ENABLE_PIN, HIGH);
-    Serial.println("Driver enabled");
-    
-  } else if (command == "DISABLE" || command == "DIS") {
-    stopMotor();
-    digitalWrite(ENABLE_PIN, LOW);
-    Serial.println("Driver disabled");
-    
   } else {
     Serial.print("Unknown command: ");
     Serial.println(cmd);
@@ -254,8 +242,6 @@ void processCommand(String cmd) {
     Serial.println("  ESTOP or E - Emergency stop");
     Serial.println("  STATUS or ? - Get motor status");
     Serial.println("  RESET - Reset position to zero");
-    Serial.println("  ENABLE - Enable driver");
-    Serial.println("  DISABLE - Disable driver");
   }
 }
 
