@@ -4,9 +4,8 @@
 
 This system controls two Wantai 85BYGH450C-060 stepper motors using:
 - **Controller**: Raspberry Pi 4
-- **Motor Controllers**: 2x Teensy 4.1 boards
+- **Motor Controller**: 1x Teensy 4.1 board (controls both motors)
 - **Drivers**: 2x DQ860HA-V3.3 stepper drivers
-- **Status Display**: Arduino Nano (LED indicators)
 
 ---
 
@@ -30,36 +29,40 @@ This system controls two Wantai 85BYGH450C-060 stepper motors using:
 
 ## Pin Connections
 
-### Teensy 4.1 #1 (Left/Port Motor)
+### Single Teensy 4.1 (Controls Both Motors)
 
 | Teensy Pin | Function | Connects To |
 |------------|----------|-------------|
+| **Motor 1 (Left/Port)** |
 | Pin 0 | PWM/STEP Output | Driver 1 - PUL+ |
 | Pin 1 | DIR Output | Driver 1 - DIR+ |
-| GND | Ground | Driver 1 - PUL-, DIR- |
-| USB | Serial to RPi | Raspberry Pi USB port |
-| VIN | Power Input | 5V supply |
-| GND | Ground | Common ground |
-
-### Teensy 4.1 #2 (Right/Starboard Motor)
-
-| Teensy Pin | Function | Connects To |
-|------------|----------|-------------|
-| Pin 0 | PWM/STEP Output | Driver 2 - PUL+ |
-| Pin 1 | DIR Output | Driver 2 - DIR+ |
-| GND | Ground | Driver 2 - PUL-, DIR- |
+| **Motor 2 (Right/Starboard)** |
+| Pin 2 | PWM/STEP Output | Driver 2 - PUL+ |
+| Pin 3 | DIR Output | Driver 2 - DIR+ |
+| **Common Connections** |
+| GND | Ground | Both drivers PUL-, DIR- |
 | USB | Serial to RPi | Raspberry Pi USB port |
 | VIN | Power Input | 5V supply |
 | GND | Ground | Common ground |
 
 ### DQ860HA-V3.3 Driver Connections
 
-#### Driver Control Signals (Both Drivers)
+#### Driver 1 Control Signals (Motor 1 - Left)
 | Driver Terminal | Signal | Source |
 |-----------------|--------|--------|
 | PUL+ | Step Pulse | Teensy Pin 0 |
 | PUL- | Ground | Teensy GND |
 | DIR+ | Direction | Teensy Pin 1 |
+| DIR- | Ground | Teensy GND |
+| ENA+ | (Not used) | Tie per driver manual for always-enabled |
+| ENA- | (Not used) | Tie per driver manual |
+
+#### Driver 2 Control Signals (Motor 2 - Right)
+| Driver Terminal | Signal | Source |
+|-----------------|--------|--------|
+| PUL+ | Step Pulse | Teensy Pin 2 |
+| PUL- | Ground | Teensy GND |
+| DIR+ | Direction | Teensy Pin 3 |
 | DIR- | Ground | Teensy GND |
 | ENA+ | (Not used) | Tie per driver manual for always-enabled |
 | ENA- | (Not used) | Tie per driver manual |
@@ -87,10 +90,9 @@ This system controls two Wantai 85BYGH450C-060 stepper motors using:
 ### Logic Power (5V)
 - **Source**: USB power from Raspberry Pi or external 5V supply
 - **Load**: 
-  - Each Teensy 4.1: ~100mA
-  - Arduino Nano: ~50mA
-  - **Total**: ~250mA minimum
-- **Recommended**: 5V 1A supply
+  - Single Teensy 4.1: ~100mA
+  - **Total**: ~150mA minimum
+- **Recommended**: 5V 500mA supply (USB from RPi is sufficient)
 
 ### Motor Power (24-60V DC)
 - **Source**: Dedicated high-current DC power supply
@@ -107,10 +109,9 @@ This system controls two Wantai 85BYGH450C-060 stepper motors using:
 
 All grounds must be connected together:
 - Raspberry Pi ground
-- Both Teensy grounds
-- Both driver grounds (PUL-, DIR-, ENA-)
+- Teensy ground
+- Both driver grounds (PUL-, DIR-)
 - Motor power supply ground
-- Arduino Nano ground
 
 This creates a common ground reference for all signals.
 
@@ -139,21 +140,18 @@ The driver has 8 DIP switches for microstep configuration:
 
 ### On Raspberry Pi
 
-After connecting both Teensy boards via USB:
+After connecting the Teensy board via USB:
 
 ```bash
 # List all connected USB serial devices
 ls -l /dev/ttyACM*
 
 # Typically will show:
-# /dev/ttyACM0  <- First Teensy (Left Motor)
-# /dev/ttyACM1  <- Second Teensy (Right Motor)
+# /dev/ttyACM0  <- Teensy 4.1 (controls both motors)
 
-# To identify which is which, check device info:
+# To verify the connection:
 udevadm info -a -n /dev/ttyACM0 | grep serial
 ```
-
-**Tip**: To get consistent port assignments, you can create udev rules based on Teensy serial numbers.
 
 ---
 
@@ -188,11 +186,9 @@ udevadm info -a -n /dev/ttyACM0 | grep serial
 ## Common Ground Connection Diagram
 
 ```
-Raspberry Pi GND ──┬── Teensy 1 GND ──── Driver 1 (PUL-, DIR-, ENA-)
-                   │
-                   ├── Teensy 2 GND ──── Driver 2 (PUL-, DIR-, ENA-)
-                   │
-                   ├── Arduino Nano GND
+Raspberry Pi GND ──┬── Teensy GND ──┬── Driver 1 (PUL-, DIR-)
+                   │                │
+                   │                └── Driver 2 (PUL-, DIR-)
                    │
                    └── Motor Power Supply GND
 ```
@@ -214,9 +210,9 @@ Raspberry Pi GND ──┬── Teensy 1 GND ──── Driver 1 (PUL-, DIR-,
 - Verify driver current settings
 
 ### One motor works, other doesn't
-- Swap Teensy boards to isolate issue
-- Check individual driver connections
-- Verify both Teensy boards are powered
+- Check individual driver connections (Pin 0/1 vs Pin 2/3)
+- Verify both drivers are powered
+- Test each motor individually using M1: or M2: commands
 
 ### No serial communication
 - Check USB cable connections

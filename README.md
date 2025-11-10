@@ -1,13 +1,14 @@
 # Dual Motor Control System
 ## Raspberry Pi 4 + Teensy 4.1 + Wantai Stepper Motors
 
-A high-performance dual stepper motor control system for robotics applications, featuring smooth acceleration/deceleration and serial communication between Raspberry Pi and Teensy microcontrollers.
+A high-performance dual stepper motor control system for robotics applications, featuring smooth acceleration/deceleration and **perfect motor synchronization** using a single Teensy 4.1 controlling both motors.
 
 ---
 
 ## 🎯 Project Goals
 
-✅ **Reliable Serial Communication**: Robust communication between Raspberry Pi 4 (Rx) and two Teensy 4.1 boards (Tx)  
+✅ **Perfect Synchronization**: Both motors controlled by single Teensy - zero timing drift  
+✅ **Ultra-Low Latency**: Single serial connection eliminates communication overhead  
 ✅ **Smooth Motion Control**: Operate motors from lowest to highest speeds without jitters  
 ✅ **Independent Motor Control**: Control two motors simultaneously with synchronized or independent movements  
 ✅ **High-Speed Performance**: Achieve speeds up to 20,000 steps/second per motor
@@ -18,7 +19,7 @@ A high-performance dual stepper motor control system for robotics applications, 
 
 ### Core Components
 - **Controller**: Raspberry Pi 4 (any variant)
-- **Motor Controllers**: 2x Teensy 4.1 microcontroller boards
+- **Motor Controller**: **1x Teensy 4.1** microcontroller board (controls both motors!)
 - **Motors**: 2x Wantai 85BYGH450C-060 stepper motors
   - Type: Hybrid stepper
   - Step angle: 1.8° (200 steps/rev)
@@ -28,10 +29,9 @@ A high-performance dual stepper motor control system for robotics applications, 
   - Input: 24-80V DC
   - Output: 0.5-8.0A adjustable
   - Max frequency: 400 kHz
-- **Status Display**: Arduino Nano with LEDs (optional)
 
 ### Power Requirements
-- **Logic Power**: 5V DC, 1A minimum
+- **Logic Power**: 5V DC via USB (500mA is sufficient)
 - **Motor Power**: 24-60V DC, 15A recommended (48V optimal)
 
 ---
@@ -44,9 +44,9 @@ dual-motor-control/
 ├── WIRING_GUIDE.md                    # Complete wiring instructions
 ├── TESTING_GUIDE.md                   # Testing and calibration procedures
 ├── teensy_motor_control/
-│   └── teensy_motor_control.ino      # Teensy 4.1 firmware (Arduino)
+│   └── dual_motor_control.ino        # Teensy 4.1 firmware (single board, dual motor)
 └── raspberry_pi_control/
-    ├── motor_controller.py            # Python control library & CLI
+    ├── dual_motor_controller.py       # Python control library & CLI
     └── requirements.txt               # Python dependencies
 ```
 
@@ -57,24 +57,23 @@ dual-motor-control/
 ### Step 1: Hardware Setup
 
 1. **Wire the system** following `WIRING_GUIDE.md`
-2. **Set DIP switches** on both drivers (recommended: 8 microsteps)
-3. **Connect Teensy boards** to Raspberry Pi via USB
+2. **Set DIP switches** on both drivers (recommended: full-step mode)
+3. **Connect single Teensy board** to Raspberry Pi via USB
 4. **DO NOT connect motor power yet**
 
-### Step 2: Upload Firmware to Teensy Boards
+### Step 2: Upload Firmware to Teensy Board
 
 On your development computer with Arduino IDE:
 
 ```bash
 1. Install Teensyduino: https://www.pjrc.com/teensy/td_download.html
-2. Open: teensy_motor_control/teensy_motor_control.ino
+2. Open: teensy_motor_control/dual_motor_control.ino
 3. Select: Tools > Board > Teensy 4.1
 4. Select: Tools > USB Type > Serial
-5. Upload to first Teensy
-6. Disconnect and repeat for second Teensy
+5. Upload to Teensy
 ```
 
-Each Teensy should blink its LED 3 times rapidly on startup, then blink slowly (heartbeat).
+The Teensy should blink its LED 3 times rapidly on startup, then blink slowly (heartbeat).
 
 ### Step 3: Setup Raspberry Pi
 
@@ -88,25 +87,24 @@ cd dual-motor-control/raspberry_pi_control
 # Install Python dependencies
 pip3 install -r requirements.txt
 
-# Identify Teensy serial ports
+# Identify Teensy serial port
 ls -l /dev/ttyACM*
-# Should show /dev/ttyACM0 and /dev/ttyACM1
+# Should show /dev/ttyACM0 (single Teensy)
 ```
 
 ### Step 4: Configure and Test
 
-1. **Edit `motor_controller.py`** (lines ~370):
+1. **Edit `dual_motor_controller.py`** (line ~211):
 ```python
-LEFT_MOTOR_PORT = '/dev/ttyACM0'   # Update to your left motor port
-RIGHT_MOTOR_PORT = '/dev/ttyACM1'  # Update to your right motor port
+TEENSY_PORT = '/dev/ttyACM0'  # Update to your Teensy port
 ```
 
 2. **Test communication** (WITHOUT motor power):
 ```bash
-python3 motor_controller.py
+python3 dual_motor_controller.py
 ```
 
-You should see both motors connect successfully.
+You should see the Teensy connect successfully.
 
 3. **Apply motor power** and follow `TESTING_GUIDE.md` for full testing
 
@@ -120,7 +118,7 @@ Run the interactive controller:
 
 ```bash
 cd raspberry_pi_control
-python3 motor_controller.py
+python3 dual_motor_controller.py
 ```
 
 **Available Commands**:
@@ -136,6 +134,9 @@ python3 motor_controller.py
 | `x` | Stop | Gradual stop (with deceleration) |
 | `e` | Emergency Stop | Immediate stop (no deceleration) |
 | `?` | Status | Display both motor statuses |
+| `1` | Motor 1 Control | Control Motor 1 individually |
+| `2` | Motor 2 Control | Control Motor 2 individually |
+| `r` | Reset | Reset position counters |
 | `q` | Quit | Stop motors and exit program |
 
 ### Python API
@@ -143,13 +144,13 @@ python3 motor_controller.py
 Use the library in your own Python scripts:
 
 ```python
-from motor_controller import DualMotorController
+from dual_motor_controller import DualMotorController
 
-# Initialize controller
-controller = DualMotorController('/dev/ttyACM0', '/dev/ttyACM1')
+# Initialize controller (single serial port)
+controller = DualMotorController('/dev/ttyACM0')
 
-# Connect to motors
-if controller.connect_all():
+# Connect to Teensy
+if controller.connect():
     # Move forward at 5000 steps/second
     controller.move_forward(5000)
     
@@ -161,30 +162,34 @@ if controller.connect_all():
     controller.stop_all()
     
     # Disconnect
-    controller.disconnect_all()
+    controller.disconnect()
 ```
 
 **Available Methods**:
 
 ```python
-# Dual motor control
-controller.connect_all()                    # Connect to both motors
-controller.disconnect_all()                 # Disconnect both motors
+# Connection
+controller.connect()                        # Connect to Teensy
+controller.disconnect()                     # Disconnect from Teensy
+
+# Dual motor control (both motors together)
 controller.move_forward(speed)              # Move both forward
 controller.move_backward(speed)             # Move both backward
 controller.turn_left(speed)                 # Turn left in place
 controller.turn_right(speed)                # Turn right in place
 controller.stop_all()                       # Stop both motors
-controller.emergency_stop_all()             # Emergency stop both
-controller.set_speed(left_speed, right_speed) # Set individual speeds
+controller.emergency_stop()                 # Emergency stop both
+controller.set_speed_both(speed)            # Set both motors same speed
+controller.get_status()                     # Get status of both motors
+controller.reset_all()                      # Reset both position counters
 
-# Individual motor control (motor_left or motor_right)
-controller.motor_left.set_speed(speed)      # Set speed (0-20000)
-controller.motor_left.set_direction(forward=True) # Set direction
-controller.motor_left.run()                 # Start motor
-controller.motor_left.stop()                # Stop motor
-controller.motor_left.get_status()          # Get motor status
-controller.motor_left.reset()               # Reset position counter
+# Individual motor control
+controller.set_motor_speed(1, speed)        # Set Motor 1 speed
+controller.set_motor_speed(2, speed)        # Set Motor 2 speed
+controller.set_motor_direction(1, True)     # Motor 1 forward
+controller.set_motor_direction(2, False)    # Motor 2 backward
+controller.run_motor(1)                     # Start Motor 1
+controller.stop_motor(2)                    # Stop Motor 2
 ```
 
 ### Direct Serial Commands (Advanced)
@@ -195,20 +200,20 @@ You can send commands directly to Teensy via serial terminal:
 screen /dev/ttyACM0 115200
 ```
 
-**Command Format**: `COMMAND:VALUE` or `COMMAND`
+**Command Format**: `COMMAND:VALUE` or `M1:COMMAND:VALUE` or `M2:COMMAND:VALUE`
 
 | Command | Format | Example | Description |
 |---------|--------|---------|-------------|
-| SPEED | `SPEED:value` | `SPEED:5000` | Set speed (0-20000) |
-| FORWARD | `FORWARD` or `F` | `F` | Set forward direction |
-| BACKWARD | `BACKWARD` or `B` | `B` | Set backward direction |
-| RUN | `RUN` or `R` | `R` | Start motor |
-| STOP | `STOP` or `X` | `X` | Stop motor (smooth) |
-| ESTOP | `ESTOP` or `E` | `E` | Emergency stop |
-| STATUS | `STATUS` or `?` | `?` | Get motor status |
-| RESET | `RESET` | `RESET` | Reset position to zero |
-| ENABLE | `ENABLE` | `ENABLE` | Enable driver |
-| DISABLE | `DISABLE` | `DISABLE` | Disable driver |
+| SPEED | `SPEED:value` | `SPEED:5000` | Set both motors speed |
+| SPEED (Motor specific) | `M1:SPEED:value` | `M1:SPEED:3000` | Set Motor 1 speed only |
+| FORWARD | `FORWARD` or `F` | `F` | Both motors forward |
+| FORWARD (Motor specific) | `M2:FORWARD` | `M2:F` | Motor 2 forward only |
+| BACKWARD | `BACKWARD` or `B` | `B` | Both motors backward |
+| RUN | `RUN` or `R` | `R` | Start motor(s) |
+| STOP | `STOP` or `X` | `X` | Stop motor(s) smooth |
+| ESTOP | `ESTOP` or `E` | `E` | Emergency stop ALL |
+| STATUS | `STATUS` or `?` | `?` | Get both motors status |
+| RESET | `RESET` | `RESET` | Reset both positions |
 
 ---
 
@@ -216,17 +221,20 @@ screen /dev/ttyACM0 115200
 
 ### Teensy Firmware Parameters
 
-Edit `teensy_motor_control.ino` to adjust:
+Edit `dual_motor_control.ino` to adjust:
 
 ```cpp
-// Pin Definitions (lines 18-21)
-#define PWM_PIN 2              // Step pulse output pin
-#define DIR_PIN 3              // Direction output pin
-#define ENABLE_PIN 4           // Driver enable pin
+// Motor 1 Pin Definitions
+#define M1_PWM_PIN 0           // Motor 1 step pulse
+#define M1_DIR_PIN 1           // Motor 1 direction
 
-// Motor Parameters (lines 23-27)
-#define STEPS_PER_REV 200      // Steps per revolution (motor dependent)
-#define MICROSTEPS 8           // Microstep setting (match driver DIP switches)
+// Motor 2 Pin Definitions
+#define M2_PWM_PIN 2           // Motor 2 step pulse
+#define M2_DIR_PIN 3           // Motor 2 direction
+
+// Motor Parameters
+#define STEPS_PER_REV 200      // Steps per revolution
+#define MICROSTEPS 1           // Full-step mode
 #define MAX_SPEED 20000        // Maximum steps/second
 #define MIN_SPEED 100          // Minimum steps/second
 #define ACCEL_RATE 5000        // Acceleration rate (steps/sec²)

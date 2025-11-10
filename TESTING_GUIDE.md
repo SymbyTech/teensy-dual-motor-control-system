@@ -6,10 +6,10 @@ Before powering on the system, verify:
 
 - [ ] All wiring connections match the WIRING_GUIDE.md
 - [ ] Common ground is established between all components
-- [ ] DIP switches on drivers are set correctly (8 microsteps recommended)
+- [ ] DIP switches on drivers are set correctly (full-step recommended)
 - [ ] Motor power supply is OFF
-- [ ] Both Teensy 4.1 boards are connected to Raspberry Pi via USB
-- [ ] Firmware is uploaded to both Teensy boards
+- [ ] Single Teensy 4.1 board is connected to Raspberry Pi via USB
+- [ ] Firmware is uploaded to Teensy
 
 ---
 
@@ -20,16 +20,15 @@ Before powering on the system, verify:
 On your computer with Arduino IDE:
 
 ```bash
-# Open teensy_motor_control.ino in Arduino IDE
+# Open dual_motor_control.ino in Arduino IDE
 # Set Board: Tools > Board > Teensy 4.1
 # Set USB Type: Tools > USB Type > Serial
-# Upload to first Teensy
-# Disconnect and repeat for second Teensy
+# Upload to Teensy
 ```
 
 **Expected Result**: Teensy LED blinks 3 times rapidly, then heartbeat (1 blink/second)
 
-### Step 1.2: Identify Serial Ports
+### Step 1.2: Identify Serial Port
 
 On Raspberry Pi:
 
@@ -38,20 +37,18 @@ On Raspberry Pi:
 ls -l /dev/ttyACM*
 
 # Should show:
-# /dev/ttyACM0
-# /dev/ttyACM1
+# /dev/ttyACM0  <- Single Teensy controlling both motors
 ```
 
-### Step 1.3: Test Individual Teensy Communication
+### Step 1.3: Test Teensy Communication
 
-Open two terminal windows on Raspberry Pi:
+On Raspberry Pi:
 
-**Terminal 1 (Left Motor):**
 ```bash
 # Install screen if needed
 sudo apt-get install screen
 
-# Connect to first Teensy
+# Connect to Teensy
 screen /dev/ttyACM0 115200
 
 # You should see startup message
@@ -61,71 +58,44 @@ screen /dev/ttyACM0 115200
 
 **Expected Response:**
 ```
---- Motor Status ---
-Motor ID: 1
-Running: NO
-Current Speed: 0.00
-Target Speed: 0.00
-Direction: FORWARD
-Position: 0
--------------------
-```
-
-**Terminal 2 (Right Motor):**
-```bash
-# Connect to second Teensy
-screen /dev/ttyACM1 115200
-
-# Type: STATUS
-# Press Enter
-```
-
-**Expected Response:**
-```
---- Motor Status ---
-Motor ID: 1
-Running: NO
-Current Speed: 0.00
-Target Speed: 0.00
-Direction: FORWARD
-Position: 0
--------------------
+======== DUAL MOTOR STATUS ========
+--- Motor 1 (Left/Port) ---
+  Running: NO
+  Current Speed: 0.00
+  Target Speed: 0.00
+  Direction: FORWARD
+  Position: 0
+--- Motor 2 (Right/Starboard) ---
+  Running: NO
+  Current Speed: 0.00
+  Target Speed: 0.00
+  Direction: FORWARD
+  Position: 0
+===================================
 ```
 
 **To exit screen**: Press `Ctrl+A` then `K`, then `Y`
 
 ### Step 1.4: Test Command Response
 
-For each Teensy, test these commands:
+Test these commands:
 
 | Command | Expected Response | Notes |
 |---------|------------------|-------|
-| `STATUS` or `?` | Shows motor status | Basic communication check |
-| `FORWARD` or `F` | "Direction: FORWARD" | Sets direction |
-| `BACKWARD` or `B` | "Direction: BACKWARD" | Sets direction |
-| `SPEED:1000` or `S:1000` | "Speed set to: 1000.00" | Sets speed |
-| `ENABLE` | "Driver enabled" | Enables driver |
+| `STATUS` or `?` | Shows both motors status | Basic communication check |
+| `FORWARD` or `F` | "Both motors direction: FORWARD" | Sets both motors direction |
+| `M1:FORWARD` | "Motor1 direction: FORWARD" | Sets Motor 1 only |
+| `BACKWARD` or `B` | "Both motors direction: BACKWARD" | Sets both motors direction |
+| `SPEED:1000` or `S:1000` | "Both motors speed set to: 1000" | Sets both motors speed |
+| `M1:SPEED:500` | "Motor1 speed set to: 500" | Sets Motor 1 speed only |
 
 **✓ Pass Criteria**: All commands respond correctly
 
 ---
 
-## Phase 2: Driver Enable Testing (No Motor Power)
+## Phase 2: Command Testing (No Motor Power)
 
-### Step 2.1: Enable Drivers
-
-In each serial terminal:
-
-```
-ENABLE
-```
-
-**Expected Result**: 
-- Teensy LED stays solid or blinks slowly
-- Driver status LED turns on (if equipped)
-- No error messages
-
-### Step 2.2: Set Low Speed
+### Step 2.1: Set Low Speed
 
 ```
 SPEED:500
@@ -136,16 +106,16 @@ RUN
 **Expected Result**:
 - Commands accepted
 - No movement (motor power still off)
-- Pin 2 on Teensy should output pulses (can verify with multimeter/oscilloscope)
+- Pins 0 and 2 on Teensy should output pulses (can verify with multimeter/oscilloscope)
 
-### Step 2.3: Stop Test
+### Step 2.2: Stop Test
 
 ```
 STOP
 ```
 
 **Expected Result**: 
-- "Motor stopped" message
+- "Both motors stopped" message
 - Clean response
 
 **✓ Pass Criteria**: All commands execute without errors
@@ -161,9 +131,9 @@ STOP
 
 ### Step 3.1: Apply Motor Power
 
-1. Verify both Teensy are in STOP mode
+1. Verify Teensy is in STOP mode (both motors stopped)
 2. Turn ON motor power supply (24-60V)
-3. Check driver status LEDs
+3. Check driver status LEDs (both drivers)
 
 **Expected Result**:
 - Drivers power up (LED indicators on)
@@ -172,13 +142,12 @@ STOP
 
 ### Step 3.2: First Movement Test - Motor 1
 
-**Terminal 1 (Left Motor):**
+In the serial terminal:
 ```
-RESET
-ENABLE
-SPEED:100
-FORWARD
-RUN
+M1:RESET
+M1:SPEED:100
+M1:FORWARD
+M1:RUN
 ```
 
 **Expected Result**:
@@ -194,28 +163,54 @@ RUN
 
 Stop the motor:
 ```
-STOP
+M1:STOP
 ```
 
 ### Step 3.3: First Movement Test - Motor 2
 
-Repeat Step 3.2 for Motor 2 in Terminal 2
+Test Motor 2:
+```
+M2:RESET
+M2:SPEED:100
+M2:FORWARD
+M2:RUN
+```
+
+**Expected Result**: Same as Motor 1
+
+Stop the motor:
+```
+M2:STOP
+```
 
 ### Step 3.4: Direction Test
 
-For each motor:
+Test Motor 1 backward:
+```
+M1:RESET
+M1:SPEED:100
+M1:BACKWARD
+M1:RUN
+```
+
+**Expected Result**: Motor 1 rotates in opposite direction
 
 ```
-RESET
-SPEED:100
-BACKWARD
-RUN
+M1:STOP
 ```
 
-**Expected Result**: Motor rotates in opposite direction
+Test Motor 2 backward:
+```
+M2:RESET
+M2:SPEED:100
+M2:BACKWARD
+M2:RUN
+```
+
+**Expected Result**: Motor 2 rotates in opposite direction
 
 ```
-STOP
+M2:STOP
 ```
 
 **✓ Pass Criteria**: 
@@ -333,34 +328,32 @@ cd dual-motor-control/raspberry_pi_control
 pip3 install -r requirements.txt
 
 # Make executable
-chmod +x motor_controller.py
+chmod +x dual_motor_controller.py
 ```
 
-### Step 5.2: Configure Ports
+### Step 5.2: Configure Port
 
-Edit `motor_controller.py`:
+Edit `dual_motor_controller.py`:
 
 ```python
-# Line ~370 - Update these to match your system
-LEFT_MOTOR_PORT = '/dev/ttyACM0'   # Your left Teensy port
-RIGHT_MOTOR_PORT = '/dev/ttyACM1'  # Your right Teensy port
+# Line ~211 - Update to match your system
+TEENSY_PORT = '/dev/ttyACM0'   # Your Teensy port
 ```
 
 ### Step 5.3: Run Dual Control Test
 
 ```bash
-python3 motor_controller.py
+python3 dual_motor_controller.py
 ```
 
 **Expected Output**:
 ```
 ============================================================
-Dual Motor Control System
+Dual Motor Control System (Single Teensy)
 ============================================================
-Motor 1: Connected to /dev/ttyACM0
-Motor 2: Connected to /dev/ttyACM1
+✓ Connected to Teensy at /dev/ttyACM0
 
-Motors connected successfully!
+✓ System ready!
 
 Commands:
   w - Move forward

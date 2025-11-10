@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Raspberry Pi 4 Dual Motor Controller
-Controls two Teensy 4.1 boards via serial communication
+Raspberry Pi 4 Dual Motor Controller (Single Teensy)
+Controls two motors via single Teensy 4.1 board
 For Wantai 85BYGH450C-060 Stepper Motors with DQ860HA-V3.3 Drivers
 
 Author: Daniel Khito
@@ -11,23 +11,21 @@ Date: 2025
 import serial
 import time
 import threading
-from typing import Optional, Tuple
+from typing import Optional
 import sys
 
-class MotorController:
-    """Controls a single motor via Teensy 4.1"""
+class DualMotorController:
+    """Controls both motors via single Teensy 4.1"""
     
-    def __init__(self, port: str, motor_id: int, baud_rate: int = 115200):
+    def __init__(self, port: str, baud_rate: int = 115200):
         """
-        Initialize motor controller
+        Initialize dual motor controller
         
         Args:
             port: Serial port (e.g., '/dev/ttyACM0')
-            motor_id: Motor identifier (1 or 2)
             baud_rate: Serial communication baud rate
         """
         self.port = port
-        self.motor_id = motor_id
         self.baud_rate = baud_rate
         self.serial_conn: Optional[serial.Serial] = None
         self.is_connected = False
@@ -53,28 +51,28 @@ class MotorController:
             self.serial_conn.reset_input_buffer()
             
             self.is_connected = True
-            print(f"Motor {self.motor_id}: Connected to {self.port}")
+            print(f"✓ Connected to Teensy at {self.port}")
             
             # Get initial status
             status = self.get_status()
             if status:
-                print(f"Motor {self.motor_id}: {status}")
+                print(status)
             
             return True
             
         except serial.SerialException as e:
-            print(f"Motor {self.motor_id}: Failed to connect - {e}")
+            print(f"✗ Failed to connect - {e}")
             self.is_connected = False
             return False
     
     def disconnect(self):
         """Close serial connection"""
         if self.serial_conn and self.serial_conn.is_open:
-            self.stop()
+            self.stop_all()
             time.sleep(0.5)
             self.serial_conn.close()
             self.is_connected = False
-            print(f"Motor {self.motor_id}: Disconnected")
+            print("Disconnected from Teensy")
     
     def send_command(self, command: str) -> Optional[str]:
         """
@@ -87,7 +85,7 @@ class MotorController:
             Response from Teensy or None if error
         """
         if not self.is_connected or not self.serial_conn:
-            print(f"Motor {self.motor_id}: Not connected")
+            print("Not connected to Teensy")
             return None
         
         with self.lock:
@@ -105,213 +103,124 @@ class MotorController:
                         line = self.serial_conn.readline().decode().strip()
                         if line:
                             response_lines.append(line)
-                        # Break after getting response
-                        if len(response_lines) > 0:
-                            break
+                            # For status command, read all lines
+                            if "========" in line and len(response_lines) > 1:
+                                # Read remaining status lines
+                                time.sleep(0.1)
+                                while self.serial_conn.in_waiting:
+                                    line = self.serial_conn.readline().decode().strip()
+                                    if line:
+                                        response_lines.append(line)
+                                break
                     else:
                         time.sleep(0.01)
                 
                 return '\n'.join(response_lines) if response_lines else None
                 
             except Exception as e:
-                print(f"Motor {self.motor_id}: Command error - {e}")
+                print(f"Command error - {e}")
                 return None
     
-    def set_speed(self, speed: float) -> bool:
-        """
-        Set motor speed
-        
-        Args:
-            speed: Speed in steps/second (0-20000)
-            
-        Returns:
-            True if successful
-        """
-        speed = max(0, min(speed, 20000))  # Constrain to valid range
+    # Both Motors Commands
+    def set_speed_both(self, speed: float) -> bool:
+        """Set speed for both motors"""
+        speed = max(0, min(speed, 20000))
         response = self.send_command(f"SPEED:{speed}")
         return response is not None
     
-    def set_direction(self, forward: bool = True) -> bool:
-        """
-        Set motor direction
-        
-        Args:
-            forward: True for forward, False for backward
-            
-        Returns:
-            True if successful
-        """
-        command = "FORWARD" if forward else "BACKWARD"
-        response = self.send_command(command)
-        return response is not None
-    
-    def run(self) -> bool:
-        """
-        Start motor running
-        
-        Returns:
-            True if successful
-        """
-        response = self.send_command("RUN")
-        return response is not None
-    
-    def stop(self) -> bool:
-        """
-        Stop motor (gradual deceleration)
-        
-        Returns:
-            True if successful
-        """
-        response = self.send_command("STOP")
-        return response is not None
-    
-    def emergency_stop(self) -> bool:
-        """
-        Emergency stop (immediate)
-        
-        Returns:
-            True if successful
-        """
-        response = self.send_command("ESTOP")
-        return response is not None
-    
-    def get_status(self) -> Optional[str]:
-        """
-        Get motor status
-        
-        Returns:
-            Status string or None
-        """
-        return self.send_command("STATUS")
-    
-    def reset(self) -> bool:
-        """
-        Reset motor position counter
-        
-        Returns:
-            True if successful
-        """
-        response = self.send_command("RESET")
-        return response is not None
-    
-    def enable(self) -> bool:
-        """Enable motor driver"""
-        response = self.send_command("ENABLE")
-        return response is not None
-    
-    def disable(self) -> bool:
-        """Disable motor driver"""
-        response = self.send_command("DISABLE")
-        return response is not None
-
-
-class DualMotorController:
-    """Controls both motors simultaneously"""
-    
-    def __init__(self, port1: str, port2: str):
-        """
-        Initialize dual motor controller
-        
-        Args:
-            port1: Serial port for left motor (e.g., '/dev/ttyACM0')
-            port2: Serial port for right motor (e.g., '/dev/ttyACM1')
-        """
-        self.motor_left = MotorController(port1, motor_id=1)
-        self.motor_right = MotorController(port2, motor_id=2)
-    
-    def connect_all(self) -> bool:
-        """Connect to both motors"""
-        left_ok = self.motor_left.connect()
-        right_ok = self.motor_right.connect()
-        return left_ok and right_ok
-    
-    def disconnect_all(self):
-        """Disconnect both motors"""
-        self.motor_left.disconnect()
-        self.motor_right.disconnect()
-    
-    def set_speed(self, left_speed: float, right_speed: float) -> bool:
-        """Set speed for both motors"""
-        left_ok = self.motor_left.set_speed(left_speed)
-        right_ok = self.motor_right.set_speed(right_speed)
-        return left_ok and right_ok
-    
     def move_forward(self, speed: float) -> bool:
         """Move both motors forward at specified speed"""
-        self.motor_left.set_direction(forward=True)
-        self.motor_right.set_direction(forward=True)
-        self.set_speed(speed, speed)
-        self.motor_left.run()
-        self.motor_right.run()
+        self.send_command("FORWARD")
+        self.set_speed_both(speed)
+        self.send_command("RUN")
         return True
     
     def move_backward(self, speed: float) -> bool:
         """Move both motors backward at specified speed"""
-        self.motor_left.set_direction(forward=False)
-        self.motor_right.set_direction(forward=False)
-        self.set_speed(speed, speed)
-        self.motor_left.run()
-        self.motor_right.run()
+        self.send_command("BACKWARD")
+        self.set_speed_both(speed)
+        self.send_command("RUN")
         return True
     
     def turn_left(self, speed: float) -> bool:
         """Turn left (left motor backward, right motor forward)"""
-        self.motor_left.set_direction(forward=False)
-        self.motor_right.set_direction(forward=True)
-        self.set_speed(speed, speed)
-        self.motor_left.run()
-        self.motor_right.run()
+        self.send_command("M1:BACKWARD")
+        self.send_command("M2:FORWARD")
+        self.send_command(f"SPEED:{speed}")
+        self.send_command("RUN")
         return True
     
     def turn_right(self, speed: float) -> bool:
         """Turn right (left motor forward, right motor backward)"""
-        self.motor_left.set_direction(forward=True)
-        self.motor_right.set_direction(forward=False)
-        self.set_speed(speed, speed)
-        self.motor_left.run()
-        self.motor_right.run()
+        self.send_command("M1:FORWARD")
+        self.send_command("M2:BACKWARD")
+        self.send_command(f"SPEED:{speed}")
+        self.send_command("RUN")
         return True
     
     def stop_all(self) -> bool:
-        """Stop both motors"""
-        left_ok = self.motor_left.stop()
-        right_ok = self.motor_right.stop()
-        return left_ok and right_ok
+        """Stop both motors (gradual)"""
+        response = self.send_command("STOP")
+        return response is not None
     
-    def emergency_stop_all(self) -> bool:
-        """Emergency stop both motors"""
-        left_ok = self.motor_left.emergency_stop()
-        right_ok = self.motor_right.emergency_stop()
-        return left_ok and right_ok
+    def emergency_stop(self) -> bool:
+        """Emergency stop both motors (immediate)"""
+        response = self.send_command("ESTOP")
+        return response is not None
     
-    def get_status_all(self) -> Tuple[Optional[str], Optional[str]]:
+    def get_status(self) -> Optional[str]:
         """Get status of both motors"""
-        left_status = self.motor_left.get_status()
-        right_status = self.motor_right.get_status()
-        return left_status, right_status
+        return self.send_command("STATUS")
+    
+    def reset_all(self) -> bool:
+        """Reset both motor position counters"""
+        response = self.send_command("RESET")
+        return response is not None
+    
+    # Individual Motor Commands
+    def set_motor_speed(self, motor_num: int, speed: float) -> bool:
+        """Set speed for individual motor (1 or 2)"""
+        speed = max(0, min(speed, 20000))
+        response = self.send_command(f"M{motor_num}:SPEED:{speed}")
+        return response is not None
+    
+    def set_motor_direction(self, motor_num: int, forward: bool = True) -> bool:
+        """Set direction for individual motor"""
+        direction = "FORWARD" if forward else "BACKWARD"
+        response = self.send_command(f"M{motor_num}:{direction}")
+        return response is not None
+    
+    def run_motor(self, motor_num: int) -> bool:
+        """Start individual motor"""
+        response = self.send_command(f"M{motor_num}:RUN")
+        return response is not None
+    
+    def stop_motor(self, motor_num: int) -> bool:
+        """Stop individual motor"""
+        response = self.send_command(f"M{motor_num}:STOP")
+        return response is not None
 
 
 def main():
-    """Main function for testing"""
+    """Main function for interactive control"""
     
-    # Configuration - UPDATE THESE PORTS
-    LEFT_MOTOR_PORT = '/dev/ttyACM0'   # Change to your left Teensy port
-    RIGHT_MOTOR_PORT = '/dev/ttyACM1'  # Change to your right Teensy port
+    # Configuration - UPDATE THIS PORT
+    TEENSY_PORT = '/dev/ttyACM0'  # Change to your Teensy port
     
     print("=" * 60)
-    print("Dual Motor Control System")
+    print("Dual Motor Control System (Single Teensy)")
     print("=" * 60)
     
     # Initialize controller
-    controller = DualMotorController(LEFT_MOTOR_PORT, RIGHT_MOTOR_PORT)
+    controller = DualMotorController(TEENSY_PORT)
     
     try:
-        # Connect to both motors
-        if not controller.connect_all():
-            print("Failed to connect to motors. Check ports and connections.")
+        # Connect to Teensy
+        if not controller.connect():
+            print("Failed to connect to Teensy. Check port and connection.")
             return
         
-        print("\nMotors connected successfully!")
+        print("\n✓ System ready!")
         print("\nCommands:")
         print("  w - Move forward")
         print("  s - Move backward")
@@ -322,6 +231,9 @@ def main():
         print("  + - Increase speed")
         print("  - - Decrease speed")
         print("  ? - Get status")
+        print("  1 - Control Motor 1 only")
+        print("  2 - Control Motor 2 only")
+        print("  r - Reset positions")
         print("  q - Quit")
         
         current_speed = 1000  # Starting speed
@@ -355,7 +267,7 @@ def main():
                 
             elif cmd == 'e':
                 print("EMERGENCY STOP!")
-                controller.emergency_stop_all()
+                controller.emergency_stop()
                 
             elif cmd == '+':
                 current_speed = min(current_speed + speed_increment, 20000)
@@ -366,12 +278,48 @@ def main():
                 print(f"Speed decreased to {current_speed} steps/sec")
                 
             elif cmd == '?':
-                print("\n--- Motor Status ---")
-                left_status, right_status = controller.get_status_all()
-                print("\nLeft Motor:")
-                print(left_status if left_status else "No response")
-                print("\nRight Motor:")
-                print(right_status if right_status else "No response")
+                status = controller.get_status()
+                print(status if status else "No response")
+                
+            elif cmd == 'r':
+                print("Resetting positions...")
+                controller.reset_all()
+                
+            elif cmd == '1':
+                # Motor 1 control mode
+                print("\n--- Motor 1 Control Mode ---")
+                m1_cmd = input("Motor 1 (f=forward, b=back, x=stop): ").lower()
+                if m1_cmd == 'f':
+                    controller.set_motor_direction(1, True)
+                    controller.set_motor_speed(1, current_speed)
+                    controller.run_motor(1)
+                    print(f"Motor 1 forward at {current_speed}")
+                elif m1_cmd == 'b':
+                    controller.set_motor_direction(1, False)
+                    controller.set_motor_speed(1, current_speed)
+                    controller.run_motor(1)
+                    print(f"Motor 1 backward at {current_speed}")
+                elif m1_cmd == 'x':
+                    controller.stop_motor(1)
+                    print("Motor 1 stopped")
+                    
+            elif cmd == '2':
+                # Motor 2 control mode
+                print("\n--- Motor 2 Control Mode ---")
+                m2_cmd = input("Motor 2 (f=forward, b=back, x=stop): ").lower()
+                if m2_cmd == 'f':
+                    controller.set_motor_direction(2, True)
+                    controller.set_motor_speed(2, current_speed)
+                    controller.run_motor(2)
+                    print(f"Motor 2 forward at {current_speed}")
+                elif m2_cmd == 'b':
+                    controller.set_motor_direction(2, False)
+                    controller.set_motor_speed(2, current_speed)
+                    controller.run_motor(2)
+                    print(f"Motor 2 backward at {current_speed}")
+                elif m2_cmd == 'x':
+                    controller.stop_motor(2)
+                    print("Motor 2 stopped")
                 
             elif cmd == 'q':
                 print("Shutting down...")
@@ -384,14 +332,14 @@ def main():
     
     except KeyboardInterrupt:
         print("\n\nInterrupted by user")
-        controller.emergency_stop_all()
+        controller.emergency_stop()
     
     except Exception as e:
         print(f"\nError: {e}")
-        controller.emergency_stop_all()
+        controller.emergency_stop()
     
     finally:
-        controller.disconnect_all()
+        controller.disconnect()
         print("Disconnected. Goodbye!")
 
 

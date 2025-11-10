@@ -1,22 +1,30 @@
 /*
- * Teensy 4.1 Dual Motor Control System
+ * Teensy 4.1 Dual Motor Control System (Single Board)
  * For Wantai 85BYGH450C-060 Stepper Motor with DQ860HA-V3.3 Driver
  * 
  * Hardware Connections:
- * - Pin 0: PWM to driver (speed control)
- * - Pin 1: DIR to driver (direction control)
- * - Serial1 (RX1=Pin 0, TX1=Pin 1) for Raspberry Pi communication
+ * Motor 1 (Left):
+ *   - Pin 0: PWM/STEP to Driver 1 PUL+
+ *   - Pin 1: DIR to Driver 1 DIR+
+ * Motor 2 (Right):
+ *   - Pin 2: PWM/STEP to Driver 2 PUL+
+ *   - Pin 3: DIR to Driver 2 DIR+
  * 
  * Motor Specifications:
  * - Wantai 85BYGH450C-060: 1.8° step angle, 200 steps/rev
  * - DQ860HA-V3.3: Supports up to 400kHz pulse frequency
+ * - Full-step mode (200 steps/rev)
  */
 
 #include <Arduino.h>
 
-// Pin Definitions
-#define PWM_PIN 0     // PWM/STEP output
-#define DIR_PIN 1     // DIR output
+// Motor 1 Pin Definitions (Left/Port)
+#define M1_PWM_PIN 0
+#define M1_DIR_PIN 1
+
+// Motor 2 Pin Definitions (Right/Starboard)
+#define M2_PWM_PIN 2
+#define M2_DIR_PIN 3
 
 // Motor Parameters
 #define STEPS_PER_REV 200
@@ -27,18 +35,25 @@
 
 // Serial Communication
 #define SERIAL_BAUD 115200
-#define MOTOR_ID 1            // Set to 1 for left motor, 2 for right motor
 
-// Motion Control Variables
-volatile long targetPosition = 0;
-volatile long currentPosition = 0;
-volatile float currentSpeed = 0;
-volatile float targetSpeed = 0;
-volatile bool isRunning = false;
-volatile int direction = 1;  // 1 = forward, -1 = backward
+// Motor Structure
+struct Motor {
+  uint8_t pwmPin;
+  uint8_t dirPin;
+  volatile long position;
+  volatile float currentSpeed;
+  volatile float targetSpeed;
+  volatile bool isRunning;
+  volatile int direction;  // 1 = forward, -1 = backward
+  IntervalTimer timer;
+  const char* name;
+};
+
+// Create two motor instances
+Motor motor1 = {M1_PWM_PIN, M1_DIR_PIN, 0, 0, 0, false, 1, IntervalTimer(), "Motor1"};
+Motor motor2 = {M2_PWM_PIN, M2_DIR_PIN, 0, 0, 0, false, 1, IntervalTimer(), "Motor2"};
 
 // Acceleration/Deceleration
-IntervalTimer stepTimer;
 unsigned long lastAccelUpdate = 0;
 const unsigned long accelUpdateInterval = 10; // Update speed every 10ms
 
@@ -47,35 +62,44 @@ String inputBuffer = "";
 bool commandReady = false;
 
 // Function Prototypes
-void stepISR();
-void updateSpeed();
+void stepISR_M1();
+void stepISR_M2();
+void updateSpeed(Motor &m);
 void processCommand(String cmd);
-void setSpeed(float speed);
-void setDirection(int dir);
-void stopMotor();
+void setSpeed(Motor &m, float speed);
+void setDirection(Motor &m, int dir);
+void stopMotor(Motor &m);
 void emergencyStop();
+void printStatus();
 
 void setup() {
-  // Initialize pins
-  pinMode(PWM_PIN, OUTPUT);
-  pinMode(DIR_PIN, OUTPUT);
-  pinMode(LED_BUILTIN, OUTPUT);
+  // Initialize Motor 1 pins
+  pinMode(M1_PWM_PIN, OUTPUT);
+  pinMode(M1_DIR_PIN, OUTPUT);
+  digitalWrite(M1_PWM_PIN, LOW);
+  digitalWrite(M1_DIR_PIN, LOW);
   
-  digitalWrite(PWM_PIN, LOW);
-  digitalWrite(DIR_PIN, LOW);
+  // Initialize Motor 2 pins
+  pinMode(M2_PWM_PIN, OUTPUT);
+  pinMode(M2_DIR_PIN, OUTPUT);
+  digitalWrite(M2_PWM_PIN, LOW);
+  digitalWrite(M2_DIR_PIN, LOW);
+  
+  // Initialize LED
+  pinMode(LED_BUILTIN, OUTPUT);
   
   // Initialize Serial Communication
   Serial.begin(SERIAL_BAUD);
   while (!Serial && millis() < 3000); // Wait up to 3 seconds for USB serial
   
-  Serial.println("=================================");
-  Serial.print("Teensy 4.1 Motor Controller #");
-  Serial.println(MOTOR_ID);
+  Serial.println("==========================================");
+  Serial.println("Teensy 4.1 Dual Motor Controller");
+  Serial.println("Single board controlling 2 motors");
   Serial.println("Ready for commands");
-  Serial.println("=================================");
+  Serial.println("==========================================");
   
   // Reserve buffer space
-  inputBuffer.reserve(64);
+  inputBuffer.reserve(128);
   
   // Blink LED to indicate ready
   for (int i = 0; i < 3; i++) {
@@ -109,7 +133,8 @@ void loop() {
   
   // Update Speed (Acceleration/Deceleration)
   if (millis() - lastAccelUpdate >= accelUpdateInterval) {
-    updateSpeed();
+    updateSpeed(motor1);
+    updateSpeed(motor2);
     lastAccelUpdate = millis();
   }
   
@@ -121,47 +146,57 @@ void loop() {
   }
 }
 
-void stepISR() {
-  // Generate step pulse
-  digitalWrite(PWM_PIN, HIGH);
-  delayMicroseconds(5); // Minimum pulse width for DQ860HA
-  digitalWrite(PWM_PIN, LOW);
-  
-  // Update position
-  currentPosition += direction;
+// Motor 1 Step ISR
+void stepISR_M1() {
+  digitalWrite(M1_PWM_PIN, HIGH);
+  delayMicroseconds(5);
+  digitalWrite(M1_PWM_PIN, LOW);
+  motor1.position += motor1.direction;
 }
 
-void updateSpeed() {
-  if (!isRunning) {
+// Motor 2 Step ISR
+void stepISR_M2() {
+  digitalWrite(M2_PWM_PIN, HIGH);
+  delayMicroseconds(5);
+  digitalWrite(M2_PWM_PIN, LOW);
+  motor2.position += motor2.direction;
+}
+
+void updateSpeed(Motor &m) {
+  if (!m.isRunning) {
     return;
   }
   
-  float speedDiff = targetSpeed - currentSpeed;
+  float speedDiff = m.targetSpeed - m.currentSpeed;
   float accelStep = (ACCEL_RATE * accelUpdateInterval) / 1000.0;
   
   // Smooth acceleration/deceleration
   if (abs(speedDiff) > accelStep) {
     if (speedDiff > 0) {
-      currentSpeed += accelStep;
+      m.currentSpeed += accelStep;
     } else {
-      currentSpeed -= accelStep;
+      m.currentSpeed -= accelStep;
     }
   } else {
-    currentSpeed = targetSpeed;
+    m.currentSpeed = m.targetSpeed;
   }
   
   // Constrain speed
-  currentSpeed = constrain(currentSpeed, 0, MAX_SPEED);
+  m.currentSpeed = constrain(m.currentSpeed, 0, MAX_SPEED);
   
   // Update timer frequency
-  if (currentSpeed > 0) {
-    float stepFrequency = currentSpeed;
-    float timerPeriod = 1000000.0 / stepFrequency; // Period in microseconds
+  if (m.currentSpeed > 0) {
+    float timerPeriod = 1000000.0 / m.currentSpeed;
+    m.timer.end();
     
-    stepTimer.end();
-    stepTimer.begin(stepISR, timerPeriod);
+    // Select correct ISR based on motor
+    if (m.pwmPin == M1_PWM_PIN) {
+      m.timer.begin(stepISR_M1, timerPeriod);
+    } else {
+      m.timer.begin(stepISR_M2, timerPeriod);
+    }
   } else {
-    stepTimer.end();
+    m.timer.end();
   }
 }
 
@@ -169,11 +204,23 @@ void processCommand(String cmd) {
   cmd.trim();
   cmd.toUpperCase();
   
-  // Parse command format: COMMAND:VALUE
-  int separatorIndex = cmd.indexOf(':');
+  // Parse command format: COMMAND:VALUE or MOTOR:COMMAND:VALUE
+  int firstColon = cmd.indexOf(':');
   String command = "";
   String value = "";
+  Motor *targetMotor = nullptr;
   
+  // Check if command starts with M1 or M2
+  if (cmd.startsWith("M1:") || cmd.startsWith("1:")) {
+    targetMotor = &motor1;
+    cmd = cmd.substring(cmd.indexOf(':') + 1);
+  } else if (cmd.startsWith("M2:") || cmd.startsWith("2:")) {
+    targetMotor = &motor2;
+    cmd = cmd.substring(cmd.indexOf(':') + 1);
+  }
+  
+  // Parse remaining command
+  int separatorIndex = cmd.indexOf(':');
   if (separatorIndex > 0) {
     command = cmd.substring(0, separatorIndex);
     value = cmd.substring(separatorIndex + 1);
@@ -184,103 +231,171 @@ void processCommand(String cmd) {
   // Process Commands
   if (command == "SPEED" || command == "S") {
     float speed = value.toFloat();
-    setSpeed(speed);
-    Serial.print("Speed set to: ");
-    Serial.println(speed);
+    if (targetMotor) {
+      setSpeed(*targetMotor, speed);
+      Serial.print(targetMotor->name);
+      Serial.print(" speed set to: ");
+      Serial.println(speed);
+    } else {
+      // Set both motors
+      setSpeed(motor1, speed);
+      setSpeed(motor2, speed);
+      Serial.print("Both motors speed set to: ");
+      Serial.println(speed);
+    }
     
   } else if (command == "FORWARD" || command == "FWD" || command == "F") {
-    setDirection(1);
-    Serial.println("Direction: FORWARD");
+    if (targetMotor) {
+      setDirection(*targetMotor, 1);
+      Serial.print(targetMotor->name);
+      Serial.println(" direction: FORWARD");
+    } else {
+      setDirection(motor1, 1);
+      setDirection(motor2, 1);
+      Serial.println("Both motors direction: FORWARD");
+    }
     
   } else if (command == "BACKWARD" || command == "BACK" || command == "B") {
-    setDirection(-1);
-    Serial.println("Direction: BACKWARD");
+    if (targetMotor) {
+      setDirection(*targetMotor, -1);
+      Serial.print(targetMotor->name);
+      Serial.println(" direction: BACKWARD");
+    } else {
+      setDirection(motor1, -1);
+      setDirection(motor2, -1);
+      Serial.println("Both motors direction: BACKWARD");
+    }
     
   } else if (command == "STOP" || command == "X") {
-    stopMotor();
-    Serial.println("Motor stopped");
+    if (targetMotor) {
+      stopMotor(*targetMotor);
+      Serial.print(targetMotor->name);
+      Serial.println(" stopped");
+    } else {
+      stopMotor(motor1);
+      stopMotor(motor2);
+      Serial.println("Both motors stopped");
+    }
     
   } else if (command == "ESTOP" || command == "E") {
     emergencyStop();
-    Serial.println("EMERGENCY STOP");
+    Serial.println("EMERGENCY STOP - ALL MOTORS");
     
   } else if (command == "RUN" || command == "R") {
-    isRunning = true;
-    Serial.println("Motor running");
+    if (targetMotor) {
+      targetMotor->isRunning = true;
+      Serial.print(targetMotor->name);
+      Serial.println(" running");
+    } else {
+      motor1.isRunning = true;
+      motor2.isRunning = true;
+      Serial.println("Both motors running");
+    }
     
   } else if (command == "STATUS" || command == "?") {
-    Serial.println("--- Motor Status ---");
-    Serial.print("Motor ID: ");
-    Serial.println(MOTOR_ID);
-    Serial.print("Running: ");
-    Serial.println(isRunning ? "YES" : "NO");
-    Serial.print("Current Speed: ");
-    Serial.println(currentSpeed);
-    Serial.print("Target Speed: ");
-    Serial.println(targetSpeed);
-    Serial.print("Direction: ");
-    Serial.println(direction == 1 ? "FORWARD" : "BACKWARD");
-    Serial.print("Position: ");
-    Serial.println(currentPosition);
-    Serial.println("-------------------");
+    printStatus();
     
   } else if (command == "RESET" || command == "RST") {
-    currentPosition = 0;
-    targetPosition = 0;
-    stopMotor();
-    Serial.println("Motor reset");
+    if (targetMotor) {
+      targetMotor->position = 0;
+      stopMotor(*targetMotor);
+      Serial.print(targetMotor->name);
+      Serial.println(" reset");
+    } else {
+      motor1.position = 0;
+      motor2.position = 0;
+      stopMotor(motor1);
+      stopMotor(motor2);
+      Serial.println("Both motors reset");
+    }
     
   } else {
     Serial.print("Unknown command: ");
     Serial.println(cmd);
     Serial.println("Available commands:");
-    Serial.println("  SPEED:value or S:value - Set speed (0-20000)");
-    Serial.println("  FORWARD or F - Set forward direction");
-    Serial.println("  BACKWARD or B - Set backward direction");
-    Serial.println("  RUN or R - Start motor");
-    Serial.println("  STOP or X - Stop motor");
-    Serial.println("  ESTOP or E - Emergency stop");
-    Serial.println("  STATUS or ? - Get motor status");
-    Serial.println("  RESET - Reset position to zero");
+    Serial.println("  SPEED:value or S:value - Set both motors speed");
+    Serial.println("  M1:SPEED:value - Set Motor 1 speed");
+    Serial.println("  M2:SPEED:value - Set Motor 2 speed");
+    Serial.println("  FORWARD or F - Both motors forward");
+    Serial.println("  M1:FORWARD - Motor 1 forward");
+    Serial.println("  M2:BACKWARD - Motor 2 backward");
+    Serial.println("  RUN or R - Start motor(s)");
+    Serial.println("  STOP or X - Stop motor(s)");
+    Serial.println("  ESTOP or E - Emergency stop all");
+    Serial.println("  STATUS or ? - Get status");
+    Serial.println("  RESET - Reset position(s) to zero");
   }
 }
 
-void setSpeed(float speed) {
-  // Constrain speed to valid range
+void setSpeed(Motor &m, float speed) {
   speed = constrain(speed, 0, MAX_SPEED);
-  targetSpeed = speed;
+  m.targetSpeed = speed;
   
-  if (speed > 0 && !isRunning) {
-    isRunning = true;
+  if (speed > 0 && !m.isRunning) {
+    m.isRunning = true;
   } else if (speed == 0) {
-    isRunning = false;
+    m.isRunning = false;
   }
 }
 
-void setDirection(int dir) {
-  // Update direction
-  direction = (dir >= 0) ? 1 : -1;
-  digitalWrite(DIR_PIN, direction == 1 ? LOW : HIGH);
+void setDirection(Motor &m, int dir) {
+  m.direction = (dir >= 0) ? 1 : -1;
+  digitalWrite(m.dirPin, m.direction == 1 ? LOW : HIGH);
 }
 
-void stopMotor() {
+void stopMotor(Motor &m) {
   // Gradual stop
-  targetSpeed = 0;
+  m.targetSpeed = 0;
   // Wait for deceleration
-  while (currentSpeed > 1) {
-    updateSpeed();
+  while (m.currentSpeed > 1) {
+    updateSpeed(m);
     delay(accelUpdateInterval);
   }
-  isRunning = false;
-  stepTimer.end();
-  currentSpeed = 0;
+  m.isRunning = false;
+  m.timer.end();
+  m.currentSpeed = 0;
 }
 
 void emergencyStop() {
-  // Immediate stop
-  stepTimer.end();
-  isRunning = false;
-  currentSpeed = 0;
-  targetSpeed = 0;
-  digitalWrite(PWM_PIN, LOW);
+  // Immediate stop both motors
+  motor1.timer.end();
+  motor2.timer.end();
+  motor1.isRunning = false;
+  motor2.isRunning = false;
+  motor1.currentSpeed = 0;
+  motor2.currentSpeed = 0;
+  motor1.targetSpeed = 0;
+  motor2.targetSpeed = 0;
+  digitalWrite(M1_PWM_PIN, LOW);
+  digitalWrite(M2_PWM_PIN, LOW);
+}
+
+void printStatus() {
+  Serial.println("======== DUAL MOTOR STATUS ========");
+  
+  Serial.println("--- Motor 1 (Left/Port) ---");
+  Serial.print("  Running: ");
+  Serial.println(motor1.isRunning ? "YES" : "NO");
+  Serial.print("  Current Speed: ");
+  Serial.println(motor1.currentSpeed);
+  Serial.print("  Target Speed: ");
+  Serial.println(motor1.targetSpeed);
+  Serial.print("  Direction: ");
+  Serial.println(motor1.direction == 1 ? "FORWARD" : "BACKWARD");
+  Serial.print("  Position: ");
+  Serial.println(motor1.position);
+  
+  Serial.println("--- Motor 2 (Right/Starboard) ---");
+  Serial.print("  Running: ");
+  Serial.println(motor2.isRunning ? "YES" : "NO");
+  Serial.print("  Current Speed: ");
+  Serial.println(motor2.currentSpeed);
+  Serial.print("  Target Speed: ");
+  Serial.println(motor2.targetSpeed);
+  Serial.print("  Direction: ");
+  Serial.println(motor2.direction == 1 ? "FORWARD" : "BACKWARD");
+  Serial.print("  Position: ");
+  Serial.println(motor2.position);
+  
+  Serial.println("===================================");
 }
