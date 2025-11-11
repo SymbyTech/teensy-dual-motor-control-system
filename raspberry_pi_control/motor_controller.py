@@ -271,10 +271,12 @@ def main():
                 
             elif cmd == '+':
                 current_speed = min(current_speed + speed_increment, 20000)
+                controller.set_speed_both(current_speed)
                 print(f"Speed increased to {current_speed} steps/sec")
                 
             elif cmd == '-':
                 current_speed = max(current_speed - speed_increment, 100)
+                controller.set_speed_both(current_speed)
                 print(f"Speed decreased to {current_speed} steps/sec")
                 
             elif cmd == '?':
