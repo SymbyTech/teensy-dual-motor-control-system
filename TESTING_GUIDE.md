@@ -20,7 +20,7 @@ Before powering on the system, verify:
 On your computer with Arduino IDE:
 
 ```bash
-# Open dual_motor_control.ino in Arduino IDE
+# Open main.cpp in Arduino IDE
 # Set Board: Tools > Board > Teensy 4.1
 # Set USB Type: Tools > USB Type > Serial
 # Upload to Teensy
@@ -65,12 +65,15 @@ screen /dev/ttyACM0 115200
   Target Speed: 0.00
   Direction: FORWARD
   Position: 0
+  Boost Active: NO
 --- Motor 2 (Right/Starboard) ---
   Running: NO
   Current Speed: 0.00
   Target Speed: 0.00
   Direction: FORWARD
   Position: 0
+  Boost Active: NO
+--- Sync Drift: 0 steps ---
 ===================================
 ```
 
@@ -86,8 +89,11 @@ Test these commands:
 | `FORWARD` or `F` | "Both motors direction: FORWARD" | Sets both motors direction |
 | `M1:FORWARD` | "Motor1 direction: FORWARD" | Sets Motor 1 only |
 | `BACKWARD` or `B` | "Both motors direction: BACKWARD" | Sets both motors direction |
-| `SPEED:1000` or `S:1000` | "Both motors speed set to: 1000" | Sets both motors speed |
+| `SPEED:1000` | "Both motors speed set to: 1000" | Sets both motors speed (max 5000) |
 | `M1:SPEED:500` | "Motor1 speed set to: 500" | Sets Motor 1 speed only |
+| `SPIN:LEFT:1000` | "Spinning LEFT at 1000" | Point turn left |
+| `SPIN:RIGHT:1000` | "Spinning RIGHT at 1000" | Point turn right |
+| `SYNC` | "Motors synchronized" | Reset both positions to 0 |
 
 **✓ Pass Criteria**: All commands respond correctly
 
@@ -106,7 +112,7 @@ RUN
 **Expected Result**:
 - Commands accepted
 - No movement (motor power still off)
-- Pins 0 and 2 on Teensy should output pulses (can verify with multimeter/oscilloscope)
+- Pins 2 and 4 on Teensy should output pulses (can verify with multimeter/oscilloscope)
 
 ### Step 2.2: Stop Test
 
@@ -265,26 +271,21 @@ STOP
 - Note any vibration or resonance frequencies
 - Check if motors get warmer (normal)
 
-### Step 4.3: High Speed Test (5000-15000 steps/sec)
+### Step 4.3: Maximum Speed Test (5000 steps/sec)
 
-Incrementally test higher speeds:
+**Note**: System is capped at 5000 steps/sec for better control and torque.
 
 ```
-SPEED:8000
+SPEED:5000
 RUN
-# Observe
-STOP
-
-SPEED:10000
-RUN
-# Observe
-STOP
-
-SPEED:15000
-RUN
-# Observe
+# Observe for 10 seconds
 STOP
 ```
+
+**Expected Behavior**:
+- Smooth operation at max speed
+- Motors may generate more heat (normal)
+- Good torque retention
 
 **Warning Signs to Watch**:
 - Grinding or clicking sounds (may indicate stalling)
@@ -292,22 +293,8 @@ STOP
 - Motor getting very hot quickly
 - Inconsistent speed
 
-### Step 4.4: Maximum Speed Test
-
-```
-SPEED:20000
-RUN
-# Observe carefully
-STOP
-```
-
-**Note**: At maximum speed, motors may:
-- Generate more heat
-- Have reduced torque
-- Show slight vibration
-
 **✓ Pass Criteria**: 
-- Smooth operation across full speed range
+- Smooth operation across full speed range (100-5000 steps/sec)
 - No stalling at any speed
 - Acceleration/deceleration is gradual
 
@@ -328,22 +315,22 @@ cd dual-motor-control/raspberry_pi_control
 pip3 install -r requirements.txt
 
 # Make executable
-chmod +x dual_motor_controller.py
+chmod +x motor_controller.py
 ```
 
 ### Step 5.2: Configure Port
 
-Edit `dual_motor_controller.py`:
+Edit `motor_controller.py`:
 
 ```python
-# Line ~211 - Update to match your system
+# Line ~230 - Update to match your system
 TEENSY_PORT = '/dev/ttyACM0'   # Your Teensy port
 ```
 
 ### Step 5.3: Run Dual Control Test
 
 ```bash
-python3 dual_motor_controller.py
+python3 motor_controller.py
 ```
 
 **Expected Output**:
@@ -358,25 +345,40 @@ Dual Motor Control System (Single Teensy)
 Commands:
   w - Move forward
   s - Move backward
-  ...
+  a - Spin left (point turn)
+  d - Spin right (point turn)
+  W - BOOST forward
+  S - BOOST backward
+  A - BOOST spin left
+  D - BOOST spin right
+  x - Stop
+  e - Emergency stop
+  + - Increase speed
+  - - Decrease speed
+  ? - Get status
+  y - Sync motors
+  1 - Control Motor 1 only
+  2 - Control Motor 2 only
+  r - Reset positions
+  q - Quit
 Current speed: 1000 steps/sec
 Ready for commands...
 ```
 
-### Step 5.4: Synchronized Movement Tests
+### Step 5.4: Basic Movement Tests
 
 Test each command:
 
 | Command | Test | Expected Result |
-|---------|------|-----------------|
+|---------|------|------------------|
 | `w` | Forward | Both motors rotate forward at same speed |
 | `s` | Backward | Both motors rotate backward at same speed |
-| `a` | Turn left | Left motor backward, right forward |
-| `d` | Turn right | Left motor forward, right backward |
-| `+` | Increase speed | Speed increases by 500 steps/sec |
-| `-` | Decrease speed | Speed decreases by 500 steps/sec |
+| `a` | Spin left | M1 backward, M2 forward (point turn) |
+| `d` | Spin right | M1 forward, M2 backward (point turn) |
+| `+` | Increase speed | Speed increases by 500 steps/sec (max 5000) |
+| `-` | Decrease speed | Speed decreases by 500 steps/sec (min 100) |
 | `x` | Stop | Both motors stop smoothly |
-| `?` | Status | Shows status of both motors |
+| `?` | Status | Shows status with boost and sync info |
 
 ### Step 5.5: Speed Ramp Test
 
@@ -397,13 +399,274 @@ Starting from stopped:
 
 ---
 
-## Phase 6: Anti-Jitter Tuning
+## Phase 6: Boost Function Testing
+
+The boost function provides a brief high-speed "kick" to overcome static friction, then smoothly returns to target speed. This is especially useful for spinning maneuvers.
+
+### Step 6.1: Understanding Boost
+
+**What is Boost?**
+- Temporarily increases speed by a multiplier (default 1.5x = 50% increase)
+- Lasts for a configured duration (default 200ms)
+- Automatically returns to target speed after boost expires
+- Safely capped at MAX_SPEED (5000 steps/sec)
+
+**Default Configuration:**
+```
+Boost Multiplier: 1.5     (50% speed increase)
+Boost Duration:   200 ms  (0.2 second burst)
+Boost Enabled:    true
+```
+
+### Step 6.2: Test Normal vs Boost Movement
+
+**Test 1: Normal Spin Left**
+```
+Command: a
+# Observe: Motors accelerate to 1000 steps/sec over ~0.2 seconds
+# Wait 2 seconds
+Command: x
+```
+
+**Test 2: Boosted Spin Left**
+```
+Command: A  (capital A)
+# Observe: Motors quickly jump to 1500 steps/sec, then settle to 1000
+# You should see/hear the initial speed burst
+# Wait 2 seconds
+Command: x
+```
+
+**Expected Difference:**
+- Boost starts faster and more aggressively
+- Normal movement has smoother start
+- Both end at same target speed
+
+### Step 6.3: Monitor Boost Status
+
+During a boost movement:
+```
+Command: A
+# Immediately press ?
+Command: ?
+```
+
+**Expected Output:**
+```
+======== DUAL MOTOR STATUS ========
+--- Motor 1 (Left/Port) ---
+  Running: YES
+  Current Speed: 1450.00
+  Target Speed: 1500.00
+  Direction: BACKWARD
+  Position: 523
+  Boost Active: YES        ← Boost is active
+--- Motor 2 (Right/Starboard) ---
+  Running: YES
+  Current Speed: 1450.00
+  Target Speed: 1500.00
+  Direction: FORWARD
+  Position: 525
+  Boost Active: YES        ← Boost is active
+--- Sync Drift: 2 steps ---
+===================================
+```
+
+Wait 0.3 seconds and check again:
+```
+Command: ?
+```
+
+**Expected Output:**
+```
+Boost Active: NO        ← Boost has expired
+Target Speed: 1000.00   ← Returned to normal speed
+```
+
+### Step 6.4: Test All Boost Commands
+
+| Command | Test | Expected Behavior |
+|---------|------|-------------------|
+| `W` | Boost forward | Quick acceleration, both forward |
+| `S` | Boost backward | Quick acceleration, both backward |
+| `A` | Boost spin left | Quick spin initiation |
+| `D` | Boost spin right | Quick spin initiation |
+
+### Step 6.5: Configure Boost Parameters
+
+**Via Direct Serial Command:**
+```bash
+screen /dev/ttyACM0 115200
+
+# Format: CONFIG:BOOST:multiplier:duration:enabled
+CONFIG:BOOST:1.5:200:1
+# Response: Boost configuration updated
+```
+
+**Via Python:**
+```python
+# In Python script
+controller.configure_boost(
+    multiplier=1.5,   # 1.0 - 2.0 (100% - 200%)
+    duration=200,     # 50 - 500 milliseconds
+    enabled=True      # True/False
+)
+```
+
+### Step 6.6: Test Different Boost Configurations
+
+**Conservative Boost (gentle):**
+```
+CONFIG:BOOST:1.2:100:1
+A
+# Observe: 20% boost for 0.1 seconds
+x
+```
+
+**Aggressive Boost (strong):**
+```
+CONFIG:BOOST:1.8:300:1
+A
+# Observe: 80% boost for 0.3 seconds
+x
+```
+
+**Disabled Boost:**
+```
+CONFIG:BOOST:1.0:0:0
+A
+# Observe: Should behave like normal 'a' command
+x
+```
+
+**Reset to Default:**
+```
+CONFIG:BOOST:1.5:200:1
+```
+
+### Step 6.7: Tuning Guide
+
+**If spins are sluggish:**
+- Increase multiplier: `CONFIG:BOOST:1.7:200:1`
+- Increase duration: `CONFIG:BOOST:1.5:300:1`
+
+**If spins are too aggressive:**
+- Decrease multiplier: `CONFIG:BOOST:1.3:200:1`
+- Decrease duration: `CONFIG:BOOST:1.5:100:1`
+
+**If boost causes motor stalling:**
+- Reduce multiplier: `CONFIG:BOOST:1.2:200:1`
+- Check power supply capacity
+- Verify driver current settings
+
+**If boost doesn't seem helpful:**
+- Try longer duration: `CONFIG:BOOST:1.5:400:1`
+- Increase multiplier: `CONFIG:BOOST:1.8:200:1`
+- Or disable it: `CONFIG:BOOST:1.0:0:0`
+
+### Step 6.8: Safety Verification
+
+Test that boost respects speed limits:
+```
+# Set very high boost that would exceed 5000
+CONFIG:BOOST:10.0:500:1
+
+SPEED:3000
+A
+?  # Check status immediately
+```
+
+**Expected:**
+- Current Speed should NEVER exceed 5000 steps/sec
+- System automatically caps at MAX_SPEED
+- No damage or instability
+
+**Reset to safe values:**
+```
+CONFIG:BOOST:1.5:200:1
+```
+
+**✓ Pass Criteria**: 
+- Boost provides noticeable initial speed increase
+- Motors smoothly return to target speed after boost
+- Boost respects speed limits (never exceeds 5000)
+- Configuration changes take effect immediately
+- System remains stable with different boost settings
+
+---
+
+## Phase 7: Synchronization Testing
+
+### Step 7.1: Test Sync Monitoring
+
+Run motors for extended period and monitor drift:
+```
+Command: w
+# Let run for 30 seconds
+Command: ?
+```
+
+**Check Sync Drift:**
+```
+--- Sync Drift: 45 steps ---
+```
+
+**Acceptable Range:**
+- <100 steps: Excellent synchronization
+- 100-200 steps: Good, may need adjustment
+- >200 steps: Check mechanical issues
+
+### Step 7.2: Test Manual Sync
+
+```
+Command: y  (sync motors)
+# Response: Synchronizing motors...
+
+Command: ?
+```
+
+**Expected:**
+```
+--- Motor 1 (Left/Port) ---
+  Position: 0           ← Reset to 0
+--- Motor 2 (Right/Starboard) ---
+  Position: 0           ← Reset to 0
+--- Sync Drift: 0 steps ---
+```
+
+### Step 7.3: Sync Under Load Test
+
+Run aggressive movements and check sync:
+```
+Command: A  (boost spin left)
+# Wait 2 seconds
+Command: x
+Command: D  (boost spin right)
+# Wait 2 seconds
+Command: x
+Command: w  (forward)
+# Wait 5 seconds
+Command: x
+Command: ?
+```
+
+**Check sync drift** - should still be <100 steps
+
+**✓ Pass Criteria**: 
+- Sync drift stays below 100 steps during normal operation
+- Manual sync (y) resets both positions to 0
+- System alerts if drift exceeds 100 steps
+- Motors maintain synchronization during aggressive maneuvers
+
+---
+
+## Phase 8: Anti-Jitter Tuning
 
 If you experience jittering at certain speeds, try these adjustments:
 
-### 6.1: Adjust Acceleration Rate
+### Step 8.1: Adjust Acceleration Rate
 
-In `teensy_motor_control.ino`, line ~36:
+In `main.cpp`, line ~34:
 
 ```cpp
 #define ACCEL_RATE 5000       // Steps/second^2 acceleration
@@ -414,19 +677,19 @@ In `teensy_motor_control.ino`, line ~36:
 
 Re-upload firmware and test.
 
-### 6.2: Adjust Microstep Setting
+### Step 8.2: Adjust Microstep Setting
 
 On driver DIP switches:
 - **More smooth, less torque**: Increase microsteps (16 or 32)
 - **More torque, may jitter**: Decrease microsteps (4 or 2)
 
-### 6.3: Adjust Driver Current
+### Step 8.3: Adjust Driver Current
 
 If motors are underpowered:
 1. Increase driver current setting (refer to driver manual)
 2. Should be ~80-90% of motor rated current (4.8-5.4A for 6A motors)
 
-### 6.4: Resonance Avoidance
+### Step 8.4: Resonance Avoidance
 
 Some speed ranges may cause mechanical resonance. Solutions:
 - Avoid specific speed ranges
@@ -434,15 +697,15 @@ Some speed ranges may cause mechanical resonance. Solutions:
 - Adjust acceleration profiles
 
 **✓ Pass Criteria**: 
-- Smooth operation from 100 to 20000 steps/sec
+- Smooth operation from 100 to 5000 steps/sec
 - No visible jittering
 - Consistent performance
 
 ---
 
-## Phase 7: Endurance Testing
+## Phase 9: Endurance Testing
 
-### Step 7.1: Extended Run Test
+### Step 9.1: Extended Run Test
 
 Run motors continuously for 10 minutes:
 
@@ -453,9 +716,14 @@ Command: w
 # Let run for 2 minutes
 
 Command: +
-# Increase speed
+# Increase speed to 1500
 
-# Let run for 2 minutes each at different speeds
+# Let run for 2 minutes
+
+Command: +
+# Increase speed to 2000
+
+# Let run for 2 minutes at different speeds
 ```
 
 **Monitor**:
@@ -464,7 +732,7 @@ Command: +
 - Any changes in sound or vibration
 - Position accuracy (STATUS command)
 
-### Step 7.2: Cycle Test
+### Step 9.2: Cycle Test
 
 Automate start/stop cycles:
 
@@ -473,21 +741,21 @@ Automate start/stop cycles:
 import time
 from motor_controller import DualMotorController
 
-controller = DualMotorController('/dev/ttyACM0', '/dev/ttyACM1')
-controller.connect_all()
+controller = DualMotorController('/dev/ttyACM0')
+controller.connect()
 
 for i in range(50):
     print(f"Cycle {i+1}/50")
-    controller.move_forward(5000)
+    controller.move_forward(2000)
     time.sleep(2)
     controller.stop_all()
     time.sleep(1)
-    controller.move_backward(5000)
+    controller.move_backward(2000)
     time.sleep(2)
     controller.stop_all()
     time.sleep(1)
 
-controller.disconnect_all()
+controller.disconnect()
 print("Cycle test complete!")
 ```
 
@@ -551,11 +819,12 @@ After successful testing, record your system's performance:
 
 | Metric | Target | Your Result |
 |--------|--------|-------------|
-| Max smooth speed | 15000+ steps/sec | __________ |
+| Max smooth speed | 5000 steps/sec | __________ |
 | Min stable speed | 100 steps/sec | __________ |
-| Acceleration time (0-10000) | < 3 seconds | __________ |
+| Acceleration time (0-5000) | < 1.5 seconds | __________ |
 | Position accuracy (100 rev) | ±5 steps | __________ |
-| Synchronization error | < 1% | __________ |
+| Synchronization drift | < 100 steps | __________ |
+| Boost effectiveness | Noticeable | __________ |
 
 ---
 
@@ -600,6 +869,72 @@ After successful testing, record your system's performance:
 2. Check USB connections
 3. Restart Raspberry Pi
 4. Re-establish connections
+
+---
+
+## Quick Command Reference
+
+### Python CLI Commands
+
+| Key | Action | Key | Action |
+|-----|--------|-----|--------|
+| `w` | Forward | `W` | BOOST forward |
+| `s` | Backward | `S` | BOOST backward |
+| `a` | Spin left | `A` | BOOST spin left |
+| `d` | Spin right | `D` | BOOST spin right |
+| `x` | Stop | `e` | Emergency stop |
+| `+` | Speed up | `-` | Speed down |
+| `?` | Status | `y` | Sync motors |
+| `r` | Reset | `1` | Motor 1 mode |
+| `2` | Motor 2 mode | `q` | Quit |
+
+### Direct Serial Commands
+
+| Command | Example | Description |
+|---------|---------|-------------|
+| `SPEED:X` | `SPEED:1000` | Set both motors speed (0-5000) |
+| `M1:SPEED:X` | `M1:SPEED:500` | Set Motor 1 speed only |
+| `M2:SPEED:X` | `M2:SPEED:1500` | Set Motor 2 speed only |
+| `FORWARD` or `F` | `FORWARD` | Both motors forward |
+| `BACKWARD` or `B` | `BACKWARD` | Both motors backward |
+| `SPIN:LEFT:X` | `SPIN:LEFT:1000` | Point turn left at X steps/sec |
+| `SPIN:RIGHT:X` | `SPIN:RIGHT:1000` | Point turn right at X steps/sec |
+| `BOOST:LEFT:X` | `BOOST:LEFT:1000` | Boosted spin left |
+| `BOOST:RIGHT:X` | `BOOST:RIGHT:1000` | Boosted spin right |
+| `BOOST:FORWARD:X` | `BOOST:FORWARD:2000` | Boosted forward |
+| `BOOST:BACKWARD:X` | `BOOST:BACKWARD:2000` | Boosted backward |
+| `RUN` or `R` | `RUN` | Start motor(s) |
+| `STOP` or `X` | `STOP` | Stop motor(s) smoothly |
+| `ESTOP` or `E` | `ESTOP` | Emergency stop all |
+| `STATUS` or `?` | `STATUS` | Get full status |
+| `SYNC` | `SYNC` | Synchronize positions |
+| `RESET` | `RESET` | Reset positions to 0 |
+| `CONFIG:BOOST:M:D:E` | `CONFIG:BOOST:1.5:200:1` | Configure boost (multiplier:duration:enabled) |
+
+### Boost Configuration
+
+**Format:** `CONFIG:BOOST:multiplier:duration:enabled`
+
+| Parameter | Range | Example | Description |
+|-----------|-------|---------|-------------|
+| multiplier | 1.0 - 2.0 | 1.5 | Speed multiplier (1.5 = 50% increase) |
+| duration | 50 - 500 | 200 | Boost duration in milliseconds |
+| enabled | 0 or 1 | 1 | 1=enabled, 0=disabled |
+
+**Examples:**
+- Default: `CONFIG:BOOST:1.5:200:1`
+- Conservative: `CONFIG:BOOST:1.2:100:1`
+- Aggressive: `CONFIG:BOOST:1.8:300:1`
+- Disabled: `CONFIG:BOOST:1.0:0:0`
+
+### System Specifications
+
+- **Max Speed**: 5000 steps/sec (1500 RPM)
+- **Min Speed**: 100 steps/sec (30 RPM)
+- **Acceleration**: 5000 steps/sec²
+- **Step Mode**: Full-step (200 steps/rev)
+- **Sync Threshold**: 100 steps drift alert
+- **Default Boost**: 1.5x for 200ms
 
 ---
 

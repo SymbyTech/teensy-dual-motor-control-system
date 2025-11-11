@@ -124,7 +124,7 @@ class DualMotorController:
     # Both Motors Commands
     def set_speed_both(self, speed: float) -> bool:
         """Set speed for both motors"""
-        speed = max(0, min(speed, 20000))
+        speed = max(0, min(speed, 5000))  # Capped to 5000 for better control
         response = self.send_command(f"SPEED:{speed}")
         return response is not None
     
@@ -142,21 +142,35 @@ class DualMotorController:
         self.send_command("RUN")
         return True
     
-    def turn_left(self, speed: float) -> bool:
-        """Turn left (left motor backward, right motor forward)"""
-        self.send_command("M1:BACKWARD")
-        self.send_command("M2:FORWARD")
-        self.send_command(f"SPEED:{speed}")
-        self.send_command("RUN")
-        return True
+    def spin_left(self, speed: float) -> bool:
+        """Spin left - point turn (M1 back, M2 forward)"""
+        response = self.send_command(f"SPIN:LEFT:{speed}")
+        return response is not None
     
-    def turn_right(self, speed: float) -> bool:
-        """Turn right (left motor forward, right motor backward)"""
-        self.send_command("M1:FORWARD")
-        self.send_command("M2:BACKWARD")
-        self.send_command(f"SPEED:{speed}")
-        self.send_command("RUN")
-        return True
+    def spin_right(self, speed: float) -> bool:
+        """Spin right - point turn (M1 forward, M2 back)"""
+        response = self.send_command(f"SPIN:RIGHT:{speed}")
+        return response is not None
+    
+    def boost_spin_left(self, speed: float) -> bool:
+        """Boosted spin left with initial speed burst"""
+        response = self.send_command(f"BOOST:LEFT:{speed}")
+        return response is not None
+    
+    def boost_spin_right(self, speed: float) -> bool:
+        """Boosted spin right with initial speed burst"""
+        response = self.send_command(f"BOOST:RIGHT:{speed}")
+        return response is not None
+    
+    def boost_forward(self, speed: float) -> bool:
+        """Boosted forward movement"""
+        response = self.send_command(f"BOOST:FORWARD:{speed}")
+        return response is not None
+    
+    def boost_backward(self, speed: float) -> bool:
+        """Boosted backward movement"""
+        response = self.send_command(f"BOOST:BACKWARD:{speed}")
+        return response is not None
     
     def stop_all(self) -> bool:
         """Stop both motors (gradual)"""
@@ -177,10 +191,27 @@ class DualMotorController:
         response = self.send_command("RESET")
         return response is not None
     
+    def sync_motors(self) -> bool:
+        """Synchronize both motor positions"""
+        response = self.send_command("SYNC")
+        return response is not None
+    
+    def configure_boost(self, multiplier: float, duration: int, enabled: bool = True) -> bool:
+        """Configure boost parameters
+        
+        Args:
+            multiplier: Speed multiplier (1.0 - 2.0)
+            duration: Boost duration in milliseconds (50-500)
+            enabled: Enable/disable boost
+        """
+        enabled_val = 1 if enabled else 0
+        response = self.send_command(f"CONFIG:BOOST:{multiplier}:{duration}:{enabled_val}")
+        return response is not None
+    
     # Individual Motor Commands
     def set_motor_speed(self, motor_num: int, speed: float) -> bool:
         """Set speed for individual motor (1 or 2)"""
-        speed = max(0, min(speed, 20000))
+        speed = max(0, min(speed, 5000))  # Capped to 5000
         response = self.send_command(f"M{motor_num}:SPEED:{speed}")
         return response is not None
     
@@ -224,13 +255,18 @@ def main():
         print("\nCommands:")
         print("  w - Move forward")
         print("  s - Move backward")
-        print("  a - Turn left")
-        print("  d - Turn right")
+        print("  a - Spin left (point turn)")
+        print("  d - Spin right (point turn)")
+        print("  W - BOOST forward")
+        print("  S - BOOST backward")
+        print("  A - BOOST spin left")
+        print("  D - BOOST spin right")
         print("  x - Stop")
         print("  e - Emergency stop")
         print("  + - Increase speed")
         print("  - - Decrease speed")
         print("  ? - Get status")
+        print("  y - Sync motors")
         print("  1 - Control Motor 1 only")
         print("  2 - Control Motor 2 only")
         print("  r - Reset positions")
@@ -254,12 +290,28 @@ def main():
                 controller.move_backward(current_speed)
                 
             elif cmd == 'a':
-                print(f"Turning left at {current_speed} steps/sec")
-                controller.turn_left(current_speed)
+                print(f"Spinning left at {current_speed} steps/sec")
+                controller.spin_left(current_speed)
                 
             elif cmd == 'd':
-                print(f"Turning right at {current_speed} steps/sec")
-                controller.turn_right(current_speed)
+                print(f"Spinning right at {current_speed} steps/sec")
+                controller.spin_right(current_speed)
+                
+            elif cmd == 'W':
+                print(f"BOOST forward at {current_speed} steps/sec")
+                controller.boost_forward(current_speed)
+                
+            elif cmd == 'S':
+                print(f"BOOST backward at {current_speed} steps/sec")
+                controller.boost_backward(current_speed)
+                
+            elif cmd == 'A':
+                print(f"BOOST spin left at {current_speed} steps/sec")
+                controller.boost_spin_left(current_speed)
+                
+            elif cmd == 'D':
+                print(f"BOOST spin right at {current_speed} steps/sec")
+                controller.boost_spin_right(current_speed)
                 
             elif cmd == 'x':
                 print("Stopping motors...")
@@ -270,7 +322,7 @@ def main():
                 controller.emergency_stop()
                 
             elif cmd == '+':
-                current_speed = min(current_speed + speed_increment, 20000)
+                current_speed = min(current_speed + speed_increment, 5000)
                 controller.set_speed_both(current_speed)
                 print(f"Speed increased to {current_speed} steps/sec")
                 
@@ -286,6 +338,10 @@ def main():
             elif cmd == 'r':
                 print("Resetting positions...")
                 controller.reset_all()
+                
+            elif cmd == 'y':
+                print("Synchronizing motors...")
+                controller.sync_motors()
                 
             elif cmd == '1':
                 # Motor 1 control mode

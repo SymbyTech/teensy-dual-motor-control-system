@@ -29,12 +29,29 @@
 // Motor Parameters
 #define STEPS_PER_REV 200
 #define MICROSTEPS 1          // Full-step mode
-#define MAX_SPEED 20000       // Maximum steps/second
+#define MAX_SPEED 5000        // Maximum steps/second (capped for better control)
 #define MIN_SPEED 100         // Minimum steps/second
 #define ACCEL_RATE 5000       // Steps/second^2 acceleration
 
+// Boost Parameters
+#define BOOST_MULTIPLIER 1.5  // 50% speed boost
+#define BOOST_DURATION 200    // Boost duration in milliseconds
+
+// Sync Parameters
+#define SYNC_CHECK_INTERVAL 1000  // Check sync every 1 second
+#define SYNC_THRESHOLD 100        // Alert if motors drift >100 steps
+
 // Serial Communication
 #define SERIAL_BAUD 115200
+
+// Boost Configuration
+struct BoostConfig {
+  float multiplier;     // Boost speed multiplier
+  uint16_t duration;    // Boost duration in ms
+  bool enabled;         // Boost enable/disable
+};
+
+BoostConfig boostConfig = {BOOST_MULTIPLIER, BOOST_DURATION, true};
 
 // Motor Structure
 struct Motor {
@@ -47,15 +64,23 @@ struct Motor {
   volatile int direction;  // 1 = forward, -1 = backward
   IntervalTimer timer;
   const char* name;
+  // Boost parameters
+  bool boostActive;
+  unsigned long boostStartTime;
+  float boostSpeed;
+  float normalSpeed;
 };
 
 // Create two motor instances
-Motor motor1 = {M1_PWM_PIN, M1_DIR_PIN, 0, 0, 0, false, 1, IntervalTimer(), "Motor1"};
-Motor motor2 = {M2_PWM_PIN, M2_DIR_PIN, 0, 0, 0, false, 1, IntervalTimer(), "Motor2"};
+Motor motor1 = {M1_PWM_PIN, M1_DIR_PIN, 0, 0, 0, false, 1, IntervalTimer(), "Motor1", false, 0, 0, 0};
+Motor motor2 = {M2_PWM_PIN, M2_DIR_PIN, 0, 0, 0, false, 1, IntervalTimer(), "Motor2", false, 0, 0, 0};
 
 // Acceleration/Deceleration
 unsigned long lastAccelUpdate = 0;
 const unsigned long accelUpdateInterval = 10; // Update speed every 10ms
+
+// Sync Tracking
+unsigned long lastSyncCheck = 0;
 
 // Command Buffer
 String inputBuffer = "";
@@ -71,6 +96,8 @@ void setDirection(Motor &m, int dir);
 void stopMotor(Motor &m);
 void emergencyStop();
 void printStatus();
+void applyBoost(Motor &m, float targetSpeed);
+void checkSync();
 
 void setup() {
   // Initialize Motor 1 pins
@@ -138,6 +165,12 @@ void loop() {
     lastAccelUpdate = millis();
   }
   
+  // Check Sync (every second)
+  if (millis() - lastSyncCheck >= SYNC_CHECK_INTERVAL) {
+    checkSync();
+    lastSyncCheck = millis();
+  }
+  
   // Status LED heartbeat
   static unsigned long lastBlink = 0;
   if (millis() - lastBlink > 1000) {
@@ -165,6 +198,14 @@ void stepISR_M2() {
 void updateSpeed(Motor &m) {
   if (!m.isRunning) {
     return;
+  }
+  
+  // Check if boost has expired
+  if (m.boostActive && (millis() - m.boostStartTime >= boostConfig.duration)) {
+    m.boostActive = false;
+    m.targetSpeed = m.normalSpeed;  // Return to normal speed
+    Serial.print(m.name);
+    Serial.println(" boost complete - returning to normal speed");
   }
   
   float speedDiff = m.targetSpeed - m.currentSpeed;
@@ -309,6 +350,113 @@ void processCommand(String cmd) {
       Serial.println("Both motors reset");
     }
     
+  } else if (command == "SPIN") {
+    // SPIN:LEFT:speed or SPIN:RIGHT:speed
+    int colonPos = value.indexOf(':');
+    String direction = value.substring(0, colonPos);
+    float speed = value.substring(colonPos + 1).toFloat();
+    
+    if (direction == "LEFT" || direction == "L") {
+      setDirection(motor1, -1);  // M1 backward
+      setDirection(motor2, 1);   // M2 forward
+      setSpeed(motor1, speed);
+      setSpeed(motor2, speed);
+      motor1.isRunning = true;
+      motor2.isRunning = true;
+      Serial.print("Spinning LEFT at ");
+      Serial.println(speed);
+    } else if (direction == "RIGHT" || direction == "R") {
+      setDirection(motor1, 1);   // M1 forward
+      setDirection(motor2, -1);  // M2 backward
+      setSpeed(motor1, speed);
+      setSpeed(motor2, speed);
+      motor1.isRunning = true;
+      motor2.isRunning = true;
+      Serial.print("Spinning RIGHT at ");
+      Serial.println(speed);
+    } else {
+      Serial.println("Invalid SPIN direction. Use LEFT or RIGHT");
+    }
+    
+  } else if (command == "BOOST") {
+    // BOOST:LEFT:speed or BOOST:RIGHT:speed or BOOST:FORWARD:speed
+    int colonPos = value.indexOf(':');
+    String direction = value.substring(0, colonPos);
+    float speed = value.substring(colonPos + 1).toFloat();
+    
+    if (direction == "LEFT" || direction == "L") {
+      setDirection(motor1, -1);
+      setDirection(motor2, 1);
+      applyBoost(motor1, speed);
+      applyBoost(motor2, speed);
+      motor1.isRunning = true;
+      motor2.isRunning = true;
+      Serial.print("BOOST Spin LEFT at ");
+      Serial.println(speed);
+    } else if (direction == "RIGHT" || direction == "R") {
+      setDirection(motor1, 1);
+      setDirection(motor2, -1);
+      applyBoost(motor1, speed);
+      applyBoost(motor2, speed);
+      motor1.isRunning = true;
+      motor2.isRunning = true;
+      Serial.print("BOOST Spin RIGHT at ");
+      Serial.println(speed);
+    } else if (direction == "FORWARD" || direction == "F") {
+      setDirection(motor1, 1);
+      setDirection(motor2, 1);
+      applyBoost(motor1, speed);
+      applyBoost(motor2, speed);
+      motor1.isRunning = true;
+      motor2.isRunning = true;
+      Serial.print("BOOST Forward at ");
+      Serial.println(speed);
+    } else if (direction == "BACKWARD" || direction == "B") {
+      setDirection(motor1, -1);
+      setDirection(motor2, -1);
+      applyBoost(motor1, speed);
+      applyBoost(motor2, speed);
+      motor1.isRunning = true;
+      motor2.isRunning = true;
+      Serial.print("BOOST Backward at ");
+      Serial.println(speed);
+    } else {
+      Serial.println("Invalid BOOST direction");
+    }
+    
+  } else if (command == "SYNC") {
+    // Reset both motor positions simultaneously
+    noInterrupts();
+    motor1.position = 0;
+    motor2.position = 0;
+    interrupts();
+    Serial.println("Motors synchronized - positions reset");
+    
+  } else if (command == "CONFIG") {
+    // CONFIG:BOOST:multiplier:duration:enabled
+    // Example: CONFIG:BOOST:1.5:200:1
+    if (value.startsWith("BOOST:")) {
+      String params = value.substring(6);  // Remove "BOOST:"
+      int colon1 = params.indexOf(':');
+      int colon2 = params.indexOf(':', colon1 + 1);
+      
+      boostConfig.multiplier = params.substring(0, colon1).toFloat();
+      boostConfig.duration = params.substring(colon1 + 1, colon2).toInt();
+      boostConfig.enabled = params.substring(colon2 + 1).toInt() == 1;
+      
+      Serial.println("Boost configuration updated:");
+      Serial.print("  Multiplier: ");
+      Serial.println(boostConfig.multiplier);
+      Serial.print("  Duration: ");
+      Serial.print(boostConfig.duration);
+      Serial.println(" ms");
+      Serial.print("  Enabled: ");
+      Serial.println(boostConfig.enabled ? "YES" : "NO");
+    } else {
+      Serial.println("CONFIG:BOOST:multiplier:duration:enabled");
+      Serial.println("Example: CONFIG:BOOST:1.5:200:1");
+    }
+    
   } else {
     Serial.print("Unknown command: ");
     Serial.println(cmd);
@@ -324,6 +472,12 @@ void processCommand(String cmd) {
     Serial.println("  ESTOP or E - Emergency stop all");
     Serial.println("  STATUS or ? - Get status");
     Serial.println("  RESET - Reset position(s) to zero");
+    Serial.println("  SPIN:LEFT:speed - Spin left (point turn)");
+    Serial.println("  SPIN:RIGHT:speed - Spin right (point turn)");
+    Serial.println("  BOOST:LEFT:speed - Boosted spin left");
+    Serial.println("  BOOST:RIGHT:speed - Boosted spin right");
+    Serial.println("  SYNC - Synchronize motor positions");
+    Serial.println("  CONFIG:BOOST:mult:dur:enabled - Configure boost");
   }
 }
 
@@ -384,6 +538,8 @@ void printStatus() {
   Serial.println(motor1.direction == 1 ? "FORWARD" : "BACKWARD");
   Serial.print("  Position: ");
   Serial.println(motor1.position);
+  Serial.print("  Boost Active: ");
+  Serial.println(motor1.boostActive ? "YES" : "NO");
   
   Serial.println("--- Motor 2 (Right/Starboard) ---");
   Serial.print("  Running: ");
@@ -396,6 +552,62 @@ void printStatus() {
   Serial.println(motor2.direction == 1 ? "FORWARD" : "BACKWARD");
   Serial.print("  Position: ");
   Serial.println(motor2.position);
+  Serial.print("  Boost Active: ");
+  Serial.println(motor2.boostActive ? "YES" : "NO");
+  
+  // Sync status
+  long posDiff = abs(motor1.position - motor2.position);
+  Serial.print("--- Sync Drift: ");
+  Serial.print(posDiff);
+  Serial.println(" steps ---");
   
   Serial.println("===================================");
+}
+
+void applyBoost(Motor &m, float targetSpeed) {
+  if (!boostConfig.enabled) {
+    // Boost disabled - use normal speed
+    setSpeed(m, targetSpeed);
+    return;
+  }
+  
+  // Calculate boost speed
+  float boostSpeed = targetSpeed * boostConfig.multiplier;
+  
+  // Safety cap - never exceed absolute max
+  if (boostSpeed > MAX_SPEED) {
+    boostSpeed = MAX_SPEED;
+  }
+  
+  // Store normal speed for later
+  m.normalSpeed = targetSpeed;
+  m.boostSpeed = boostSpeed;
+  
+  // Activate boost
+  m.boostActive = true;
+  m.boostStartTime = millis();
+  m.targetSpeed = boostSpeed;  // Start with boosted speed
+  
+  Serial.print(m.name);
+  Serial.print(" boost activated: ");
+  Serial.print(boostSpeed);
+  Serial.print(" steps/sec for ");
+  Serial.print(boostConfig.duration);
+  Serial.println(" ms");
+}
+
+void checkSync() {
+  // Calculate position difference
+  long posDiff = abs(motor1.position - motor2.position);
+  
+  // Alert if drift exceeds threshold
+  if (posDiff > SYNC_THRESHOLD && (motor1.isRunning || motor2.isRunning)) {
+    Serial.print("⚠️  SYNC WARNING: Position drift = ");
+    Serial.print(posDiff);
+    Serial.println(" steps");
+    Serial.print("   Motor1: ");
+    Serial.print(motor1.position);
+    Serial.print(" | Motor2: ");
+    Serial.println(motor2.position);
+  }
 }
