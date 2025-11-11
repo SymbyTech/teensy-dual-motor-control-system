@@ -34,11 +34,11 @@ This system controls two Wantai 85BYGH450C-060 stepper motors using:
 | Teensy Pin | Function | Connects To |
 |------------|----------|-------------|
 | **Motor 1 (Left/Port)** |
-| Pin 0 | PWM/STEP Output | Driver 1 - PUL+ |
-| Pin 1 | DIR Output | Driver 1 - DIR+ |
+| Pin 2 | PWM/STEP Output | Driver 1 - PUL+ |
+| Pin 3 | DIR Output | Driver 1 - DIR+ |
 | **Motor 2 (Right/Starboard)** |
-| Pin 2 | PWM/STEP Output | Driver 2 - PUL+ |
-| Pin 3 | DIR Output | Driver 2 - DIR+ |
+| Pin 4 | PWM/STEP Output | Driver 2 - PUL+ |
+| Pin 5 | DIR Output | Driver 2 - DIR+ |
 | **Common Connections** |
 | GND | Ground | Both drivers PUL-, DIR- |
 | USB | Serial to RPi | Raspberry Pi USB port |
@@ -50,9 +50,9 @@ This system controls two Wantai 85BYGH450C-060 stepper motors using:
 #### Driver 1 Control Signals (Motor 1 - Left)
 | Driver Terminal | Signal | Source |
 |-----------------|--------|--------|
-| PUL+ | Step Pulse | Teensy Pin 0 |
+| PUL+ | Step Pulse | Teensy Pin 2 |
 | PUL- | Ground | Teensy GND |
-| DIR+ | Direction | Teensy Pin 1 |
+| DIR+ | Direction | Teensy Pin 3 |
 | DIR- | Ground | Teensy GND |
 | ENA+ | (Not used) | Tie per driver manual for always-enabled |
 | ENA- | (Not used) | Tie per driver manual |
@@ -60,9 +60,9 @@ This system controls two Wantai 85BYGH450C-060 stepper motors using:
 #### Driver 2 Control Signals (Motor 2 - Right)
 | Driver Terminal | Signal | Source |
 |-----------------|--------|--------|
-| PUL+ | Step Pulse | Teensy Pin 2 |
+| PUL+ | Step Pulse | Teensy Pin 4 |
 | PUL- | Ground | Teensy GND |
-| DIR+ | Direction | Teensy Pin 3 |
+| DIR+ | Direction | Teensy Pin 5 |
 | DIR- | Ground | Teensy GND |
 | ENA+ | (Not used) | Tie per driver manual for always-enabled |
 | ENA- | (Not used) | Tie per driver manual |
@@ -210,7 +210,7 @@ Raspberry Pi GND ──┬── Teensy GND ──┬── Driver 1 (PUL-, DIR-
 - Verify driver current settings
 
 ### One motor works, other doesn't
-- Check individual driver connections (Pin 0/1 vs Pin 2/3)
+- Check individual driver connections (Pin 2/3 vs Pin 4/5)
 - Verify both drivers are powered
 - Test each motor individually using M1: or M2: commands
 

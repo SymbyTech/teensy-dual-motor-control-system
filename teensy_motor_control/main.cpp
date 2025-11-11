@@ -4,11 +4,11 @@
  * 
  * Hardware Connections:
  * Motor 1 (Left):
- *   - Pin 0: PWM/STEP to Driver 1 PUL+
- *   - Pin 1: DIR to Driver 1 DIR+
+ *   - Pin 2: PWM/STEP to Driver 1 PUL+
+ *   - Pin 3: DIR to Driver 1 DIR+
  * Motor 2 (Right):
- *   - Pin 2: PWM/STEP to Driver 2 PUL+
- *   - Pin 3: DIR to Driver 2 DIR+
+ *   - Pin 4: PWM/STEP to Driver 2 PUL+
+ *   - Pin 5: DIR to Driver 2 DIR+
  * 
  * Motor Specifications:
  * - Wantai 85BYGH450C-060: 1.8° step angle, 200 steps/rev
@@ -19,12 +19,12 @@
 #include <Arduino.h>
 
 // Motor 1 Pin Definitions (Left/Port)
-#define M1_PWM_PIN 0
-#define M1_DIR_PIN 1
+#define M1_PWM_PIN 2
+#define M1_DIR_PIN 3
 
 // Motor 2 Pin Definitions (Right/Starboard)
-#define M2_PWM_PIN 2
-#define M2_DIR_PIN 3
+#define M2_PWM_PIN 4
+#define M2_DIR_PIN 5
 
 // Motor Parameters
 #define STEPS_PER_REV 200
