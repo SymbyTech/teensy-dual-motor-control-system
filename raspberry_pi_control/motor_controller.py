@@ -124,7 +124,7 @@ class DualMotorController:
     # Both Motors Commands
     def set_speed_both(self, speed: float) -> bool:
         """Set speed for both motors"""
-        speed = max(0, min(speed, 5000))  # Capped to 5000 for better control
+        speed = max(0, min(speed, 20000))  # Max 20000 steps/sec with 8x microstepping
         response = self.send_command(f"SPEED:{speed}")
         return response is not None
     
@@ -211,7 +211,7 @@ class DualMotorController:
     # Individual Motor Commands
     def set_motor_speed(self, motor_num: int, speed: float) -> bool:
         """Set speed for individual motor (1 or 2)"""
-        speed = max(0, min(speed, 5000))  # Capped to 5000
+        speed = max(0, min(speed, 20000))  # Max 20000 steps/sec with 8x microstepping
         response = self.send_command(f"M{motor_num}:SPEED:{speed}")
         return response is not None
     
@@ -272,8 +272,8 @@ def main():
         print("  r - Reset positions")
         print("  q - Quit")
         
-        current_speed = 1000  # Starting speed
-        speed_increment = 500
+        current_speed = 2000  # Starting speed (equivalent to old 250 steps/sec in 1x)
+        speed_increment = 1000  # Larger increment for 8x microstepping
         
         print(f"\nCurrent speed: {current_speed} steps/sec")
         print("Ready for commands...")
@@ -322,7 +322,7 @@ def main():
                 controller.emergency_stop()
                 
             elif cmd == '+':
-                current_speed = min(current_speed + speed_increment, 5000)
+                current_speed = min(current_speed + speed_increment, 20000)
                 controller.set_speed_both(current_speed)
                 print(f"Speed increased to {current_speed} steps/sec")
                 

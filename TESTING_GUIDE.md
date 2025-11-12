@@ -6,7 +6,7 @@ Before powering on the system, verify:
 
 - [ ] All wiring connections match the WIRING_GUIDE.md
 - [ ] Common ground is established between all components
-- [ ] DIP switches on drivers are set correctly (full-step recommended)
+- [ ] DIP switches on drivers are set to 8x microstepping (SW5:ON, SW6:ON, SW7:ON, SW8:OFF)
 - [ ] Motor power supply is OFF
 - [ ] Single Teensy 4.1 board is connected to Raspberry Pi via USB
 - [ ] Firmware is uploaded to Teensy
@@ -89,7 +89,7 @@ Test these commands:
 | `FORWARD` or `F` | "Both motors direction: FORWARD" | Sets both motors direction |
 | `M1:FORWARD` | "Motor1 direction: FORWARD" | Sets Motor 1 only |
 | `BACKWARD` or `B` | "Both motors direction: BACKWARD" | Sets both motors direction |
-| `SPEED:1000` | "Both motors speed set to: 1000" | Sets both motors speed (max 5000) |
+| `SPEED:1000` | "Both motors speed set to: 1000" | Sets both motors speed (max 20000 with 8x) |
 | `M1:SPEED:500` | "Motor1 speed set to: 500" | Sets Motor 1 speed only |
 | `SPIN:LEFT:1000` | "Spinning LEFT at 1000" | Point turn left |
 | `SPIN:RIGHT:1000` | "Spinning RIGHT at 1000" | Point turn right |
@@ -113,6 +113,8 @@ RUN
 - Commands accepted
 - No movement (motor power still off)
 - Pins 2 and 4 on Teensy should output pulses (can verify with multimeter/oscilloscope)
+
+**Note**: With 8x microstepping, you'll see 8 step pulses per physical motor step
 
 ### Step 2.2: Stop Test
 
@@ -253,49 +255,66 @@ STOP
 - No jittering or stalling
 - Consistent speed
 
-### Step 4.2: Medium Speed Test (1000-5000 steps/sec)
+### Step 4.2: Medium Speed Test (2000-8000 steps/sec)
 
 ```
-SPEED:2000
+SPEED:4000
 RUN
 # Observe for 5 seconds
 STOP
 
-SPEED:5000
+SPEED:8000
 RUN
 # Observe for 5 seconds
 STOP
 ```
 
 **Observation**:
-- Note any vibration or resonance frequencies
+- Motion should be very smooth with 8x microstepping
+- Minimal vibration or resonance
 - Check if motors get warmer (normal)
 
-### Step 4.3: Maximum Speed Test (5000 steps/sec)
-
-**Note**: System is capped at 5000 steps/sec for better control and torque.
+### Step 4.3: High Speed Test (8000-16000 steps/sec)
 
 ```
-SPEED:5000
+SPEED:12000
+RUN
+# Observe for 5 seconds
+STOP
+
+SPEED:16000
+RUN
+# Observe for 5 seconds
+STOP
+```
+
+**Expected**: Smooth operation even at high speeds
+
+### Step 4.4: Maximum Speed Test (20000 steps/sec)
+
+**Note**: System max is 20000 steps/sec with 8x microstepping (~2500 RPM).
+
+```
+SPEED:20000
 RUN
 # Observe for 10 seconds
 STOP
 ```
 
 **Expected Behavior**:
-- Smooth operation at max speed
+- Very smooth operation at max speed (no pulsing or resonance)
 - Motors may generate more heat (normal)
-- Good torque retention
+- Better torque than old full-step mode
 
 **Warning Signs to Watch**:
-- Grinding or clicking sounds (may indicate stalling)
-- Excessive vibration (resonance)
+- Grinding or clicking sounds (may indicate insufficient power)
+- Excessive vibration (check mechanical coupling)
 - Motor getting very hot quickly
 - Inconsistent speed
 
 **✓ Pass Criteria**: 
-- Smooth operation across full speed range (100-5000 steps/sec)
-- No stalling at any speed
+- Smooth operation across full speed range (100-20000 steps/sec)
+- No stalling or resonance at any speed
 - Acceleration/deceleration is gradual
 
 ---
@@ -375,8 +394,8 @@ Test each command:
 | `s` | Backward | Both motors rotate backward at same speed |
 | `a` | Spin left | M1 backward, M2 forward (point turn) |
 | `d` | Spin right | M1 forward, M2 backward (point turn) |
-| `+` | Increase speed | Speed increases by 500 steps/sec (max 5000) |
-| `-` | Decrease speed | Speed decreases by 500 steps/sec (min 100) |
+| `+` | Increase speed | Speed increases by 1000 steps/sec (max 20000) |
+| `-` | Decrease speed | Speed decreases by 1000 steps/sec (min 100) |
 | `w` | Stop | Both motors stop smoothly |
 | `?` | Status | Shows status with boost and sync info |
 
@@ -385,9 +404,9 @@ Test each command:
 Starting from stopped:
 
 1. Press `f` (forward)
-2. Press `+` five times (increase speed to 3500)
+2. Press `+` five times (increase speed to 7000)
 3. Observe smooth acceleration
-4. Press `-` five times (decrease back to 1000)
+4. Press `-` five times (decrease back to 2000)
 5. Observe smooth deceleration
 6. Press `w` (stop)
 
@@ -423,7 +442,7 @@ Boost Enabled:    true
 **Test 1: Normal Spin Left**
 ```
 Command: a
-# Observe: Motors accelerate to 1000 steps/sec over ~0.2 seconds
+# Observe: Motors accelerate to 2000 steps/sec over ~0.25 seconds
 # Wait 2 seconds
 Command: w
 ```
@@ -431,8 +450,9 @@ Command: w
 **Test 2: Boosted Spin Left**
 ```
 Command: z
-# Observe: Motors quickly jump to 1500 steps/sec, then settle to 1000
+# Observe: Motors quickly jump to 3000 steps/sec, then settle to 2000
 # You should see/hear the initial speed burst for 0.4 seconds
+# With 8x microstepping, this is incredibly smooth!
 # Wait 2 seconds
 Command: w
 ```
@@ -930,12 +950,13 @@ After successful testing, record your system's performance:
 
 ### System Specifications
 
-- **Max Speed**: 5000 steps/sec (1500 RPM)
-- **Min Speed**: 100 steps/sec (30 RPM)
-- **Acceleration**: 5000 steps/sec²
-- **Step Mode**: Full-step (200 steps/rev)
+- **Max Speed**: 20000 steps/sec with 8x microstepping (~2500 RPM)
+- **Min Speed**: 100 steps/sec (~4 RPM)
+- **Acceleration**: 8000 steps/sec²
+- **Step Mode**: 8x microstepping (1600 microsteps/rev)
 - **Sync Threshold**: 100 steps drift alert
 - **Default Boost**: 1.5x for 400ms
+- **DIP Switches**: SW5:ON, SW6:ON, SW7:ON, SW8:OFF
 
 ---
 

@@ -28,10 +28,10 @@
 
 // Motor Parameters
 #define STEPS_PER_REV 200
-#define MICROSTEPS 1          // Full-step mode
-#define MAX_SPEED 5000        // Maximum steps/second (capped for better control)
+#define MICROSTEPS 8          // 8x microstepping (smoother, less resonance)
+#define MAX_SPEED 20000       // Maximum steps/second with 8x microstepping (2500 RPM)
 #define MIN_SPEED 100         // Minimum steps/second
-#define ACCEL_RATE 5000       // Steps/second^2 acceleration
+#define ACCEL_RATE 8000       // Steps/second^2 acceleration (scaled for 8x microstepping)
 
 // Boost Parameters
 #define BOOST_MULTIPLIER 1.5  // 50% speed boost
@@ -493,8 +493,33 @@ void setSpeed(Motor &m, float speed) {
 }
 
 void setDirection(Motor &m, int dir) {
-  m.direction = (dir >= 0) ? 1 : -1;
-  digitalWrite(m.dirPin, m.direction == 1 ? LOW : HIGH);
+  int newDir = (dir >= 0) ? 1 : -1;
+  
+  // If changing direction at high speed, slow down first
+  if (newDir != m.direction && m.currentSpeed > 500) {
+    Serial.print(m.name);
+    Serial.println(" slowing for direction change...");
+    
+    // Reduce speed before direction change
+    float originalTarget = m.targetSpeed;
+    m.targetSpeed = 200;  // Slow to safe speed
+    
+    while (m.currentSpeed > 300) {
+      updateSpeed(m);
+      delay(accelUpdateInterval);
+    }
+    
+    // Now safe to change direction
+    m.direction = newDir;
+    digitalWrite(m.dirPin, m.direction == 1 ? LOW : HIGH);
+    
+    // Restore target speed
+    m.targetSpeed = originalTarget;
+  } else {
+    // Safe to change directly
+    m.direction = newDir;
+    digitalWrite(m.dirPin, m.direction == 1 ? LOW : HIGH);
+  }
 }
 
 void stopMotor(Motor &m) {
