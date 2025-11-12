@@ -343,15 +343,15 @@ Dual Motor Control System (Single Teensy)
 ✓ System ready!
 
 Commands:
-  w - Move forward
+  f - Move forward
   s - Move backward
   a - Spin left (point turn)
   d - Spin right (point turn)
-  W - BOOST forward
-  S - BOOST backward
-  A - BOOST spin left
-  D - BOOST spin right
-  x - Stop
+  v - BOOST forward
+  x - BOOST backward
+  z - BOOST spin left
+  c - BOOST spin right
+  w - Stop
   e - Emergency stop
   + - Increase speed
   - - Decrease speed
@@ -371,25 +371,25 @@ Test each command:
 
 | Command | Test | Expected Result |
 |---------|------|------------------|
-| `w` | Forward | Both motors rotate forward at same speed |
+| `f` | Forward | Both motors rotate forward at same speed |
 | `s` | Backward | Both motors rotate backward at same speed |
 | `a` | Spin left | M1 backward, M2 forward (point turn) |
 | `d` | Spin right | M1 forward, M2 backward (point turn) |
 | `+` | Increase speed | Speed increases by 500 steps/sec (max 5000) |
 | `-` | Decrease speed | Speed decreases by 500 steps/sec (min 100) |
-| `x` | Stop | Both motors stop smoothly |
+| `w` | Stop | Both motors stop smoothly |
 | `?` | Status | Shows status with boost and sync info |
 
 ### Step 5.5: Speed Ramp Test
 
 Starting from stopped:
 
-1. Press `w` (forward)
+1. Press `f` (forward)
 2. Press `+` five times (increase speed to 3500)
 3. Observe smooth acceleration
 4. Press `-` five times (decrease back to 1000)
 5. Observe smooth deceleration
-6. Press `x` (stop)
+6. Press `w` (stop)
 
 **✓ Pass Criteria**: 
 - Both motors stay synchronized
@@ -425,16 +425,16 @@ Boost Enabled:    true
 Command: a
 # Observe: Motors accelerate to 1000 steps/sec over ~0.2 seconds
 # Wait 2 seconds
-Command: x
+Command: w
 ```
 
 **Test 2: Boosted Spin Left**
 ```
-Command: A  (capital A)
+Command: z
 # Observe: Motors quickly jump to 1500 steps/sec, then settle to 1000
 # You should see/hear the initial speed burst
 # Wait 2 seconds
-Command: x
+Command: w
 ```
 
 **Expected Difference:**
@@ -446,7 +446,7 @@ Command: x
 
 During a boost movement:
 ```
-Command: A
+Command: z
 # Immediately press ?
 Command: ?
 ```
@@ -487,10 +487,10 @@ Target Speed: 1000.00   ← Returned to normal speed
 
 | Command | Test | Expected Behavior |
 |---------|------|-------------------|
-| `W` | Boost forward | Quick acceleration, both forward |
-| `S` | Boost backward | Quick acceleration, both backward |
-| `A` | Boost spin left | Quick spin initiation |
-| `D` | Boost spin right | Quick spin initiation |
+| `v` | Boost forward | Quick acceleration, both forward |
+| `x` | Boost backward | Quick acceleration, both backward |
+| `z` | Boost spin left | Quick spin initiation |
+| `c` | Boost spin right | Quick spin initiation |
 
 ### Step 6.5: Configure Boost Parameters
 
@@ -518,25 +518,25 @@ controller.configure_boost(
 **Conservative Boost (gentle):**
 ```
 CONFIG:BOOST:1.2:100:1
-A
+z
 # Observe: 20% boost for 0.1 seconds
-x
+w
 ```
 
 **Aggressive Boost (strong):**
 ```
 CONFIG:BOOST:1.8:300:1
-A
+z
 # Observe: 80% boost for 0.3 seconds
-x
+w
 ```
 
 **Disabled Boost:**
 ```
 CONFIG:BOOST:1.0:0:0
-A
+z
 # Observe: Should behave like normal 'a' command
-x
+w
 ```
 
 **Reset to Default:**
@@ -572,7 +572,7 @@ Test that boost respects speed limits:
 CONFIG:BOOST:10.0:500:1
 
 SPEED:3000
-A
+z
 ?  # Check status immediately
 ```
 
@@ -601,7 +601,7 @@ CONFIG:BOOST:1.5:200:1
 
 Run motors for extended period and monitor drift:
 ```
-Command: w
+Command: f
 # Let run for 30 seconds
 Command: ?
 ```
@@ -638,15 +638,15 @@ Command: ?
 
 Run aggressive movements and check sync:
 ```
-Command: A  (boost spin left)
+Command: z  (boost spin left)
 # Wait 2 seconds
-Command: x
-Command: D  (boost spin right)
+Command: w
+Command: c  (boost spin right)
 # Wait 2 seconds
-Command: x
-Command: w  (forward)
+Command: w
+Command: f  (forward)
 # Wait 5 seconds
-Command: x
+Command: w
 Command: ?
 ```
 
@@ -712,7 +712,7 @@ Run motors continuously for 10 minutes:
 ```bash
 python3 motor_controller.py
 
-Command: w
+Command: f
 # Let run for 2 minutes
 
 Command: +
@@ -878,11 +878,11 @@ After successful testing, record your system's performance:
 
 | Key | Action | Key | Action |
 |-----|--------|-----|--------|
-| `w` | Forward | `W` | BOOST forward |
-| `s` | Backward | `S` | BOOST backward |
-| `a` | Spin left | `A` | BOOST spin left |
-| `d` | Spin right | `D` | BOOST spin right |
-| `x` | Stop | `e` | Emergency stop |
+| `f` | Forward | `v` | BOOST forward |
+| `s` | Backward | `x` | BOOST backward |
+| `a` | Spin left | `z` | BOOST spin left |
+| `d` | Spin right | `c` | BOOST spin right |
+| `w` | Stop | `e` | Emergency stop |
 | `+` | Speed up | `-` | Speed down |
 | `?` | Status | `y` | Sync motors |
 | `r` | Reset | `1` | Motor 1 mode |

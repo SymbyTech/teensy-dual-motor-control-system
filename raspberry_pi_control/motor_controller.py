@@ -253,15 +253,15 @@ def main():
         
         print("\n✓ System ready!")
         print("\nCommands:")
-        print("  w - Move forward")
+        print("  f - Move forward")
         print("  s - Move backward")
         print("  a - Spin left (point turn)")
         print("  d - Spin right (point turn)")
-        print("  W - BOOST forward")
-        print("  S - BOOST backward")
-        print("  A - BOOST spin left")
-        print("  D - BOOST spin right")
-        print("  x - Stop")
+        print("  v - BOOST forward")
+        print("  x - BOOST backward")
+        print("  z - BOOST spin left")
+        print("  c - BOOST spin right")
+        print("  w - Stop")
         print("  e - Emergency stop")
         print("  + - Increase speed")
         print("  - - Decrease speed")
@@ -279,9 +279,9 @@ def main():
         print("Ready for commands...")
         
         while True:
-            cmd = input("\nCommand: ").strip().lower()
+            cmd = input("\nCommand: ").strip()  # No .lower() to preserve case
             
-            if cmd == 'w':
+            if cmd == 'f':
                 print(f"Moving forward at {current_speed} steps/sec")
                 controller.move_forward(current_speed)
                 
@@ -297,23 +297,23 @@ def main():
                 print(f"Spinning right at {current_speed} steps/sec")
                 controller.spin_right(current_speed)
                 
-            elif cmd == 'W':
+            elif cmd == 'v':
                 print(f"BOOST forward at {current_speed} steps/sec")
                 controller.boost_forward(current_speed)
                 
-            elif cmd == 'S':
+            elif cmd == 'x':
                 print(f"BOOST backward at {current_speed} steps/sec")
                 controller.boost_backward(current_speed)
                 
-            elif cmd == 'A':
+            elif cmd == 'z':
                 print(f"BOOST spin left at {current_speed} steps/sec")
                 controller.boost_spin_left(current_speed)
                 
-            elif cmd == 'D':
+            elif cmd == 'c':
                 print(f"BOOST spin right at {current_speed} steps/sec")
                 controller.boost_spin_right(current_speed)
                 
-            elif cmd == 'x':
+            elif cmd == 'w':
                 print("Stopping motors...")
                 controller.stop_all()
                 
