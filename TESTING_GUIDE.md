@@ -407,14 +407,14 @@ The boost function provides a brief high-speed "kick" to overcome static frictio
 
 **What is Boost?**
 - Temporarily increases speed by a multiplier (default 1.5x = 50% increase)
-- Lasts for a configured duration (default 200ms)
+- Lasts for a configured duration (default 400ms)
 - Automatically returns to target speed after boost expires
 - Safely capped at MAX_SPEED (5000 steps/sec)
 
 **Default Configuration:**
 ```
 Boost Multiplier: 1.5     (50% speed increase)
-Boost Duration:   200 ms  (0.2 second burst)
+Boost Duration:   400 ms  (0.4 second burst)
 Boost Enabled:    true
 ```
 
@@ -432,14 +432,15 @@ Command: w
 ```
 Command: z
 # Observe: Motors quickly jump to 1500 steps/sec, then settle to 1000
-# You should see/hear the initial speed burst
+# You should see/hear the initial speed burst for 0.4 seconds
 # Wait 2 seconds
 Command: w
 ```
 
 **Expected Difference:**
-- Boost starts faster and more aggressively
-- Normal movement has smoother start
+- Boost starts faster and reaches peak speed quickly
+- Boost runs at higher speed for 0.4 seconds, then smoothly reduces
+- Normal movement has gradual acceleration throughout
 - Both end at same target speed
 
 ### Step 6.3: Monitor Boost Status
@@ -472,14 +473,14 @@ Command: ?
 ===================================
 ```
 
-Wait 0.3 seconds and check again:
+Wait 0.5 seconds and check again:
 ```
 Command: ?
 ```
 
 **Expected Output:**
 ```
-Boost Active: NO        ← Boost has expired
+Boost Active: NO        ← Boost has expired (after 0.4 sec)
 Target Speed: 1000.00   ← Returned to normal speed
 ```
 
@@ -499,7 +500,7 @@ Target Speed: 1000.00   ← Returned to normal speed
 screen /dev/ttyACM0 115200
 
 # Format: CONFIG:BOOST:multiplier:duration:enabled
-CONFIG:BOOST:1.5:200:1
+CONFIG:BOOST:1.5:400:1
 # Response: Boost configuration updated
 ```
 
@@ -508,7 +509,7 @@ CONFIG:BOOST:1.5:200:1
 # In Python script
 controller.configure_boost(
     multiplier=1.5,   # 1.0 - 2.0 (100% - 200%)
-    duration=200,     # 50 - 500 milliseconds
+    duration=400,     # 50 - 500 milliseconds
     enabled=True      # True/False
 )
 ```
@@ -541,27 +542,27 @@ w
 
 **Reset to Default:**
 ```
-CONFIG:BOOST:1.5:200:1
+CONFIG:BOOST:1.5:400:1
 ```
 
 ### Step 6.7: Tuning Guide
 
 **If spins are sluggish:**
-- Increase multiplier: `CONFIG:BOOST:1.7:200:1`
-- Increase duration: `CONFIG:BOOST:1.5:300:1`
+- Increase multiplier: `CONFIG:BOOST:1.7:400:1`
+- Increase duration: `CONFIG:BOOST:1.5:500:1`
 
 **If spins are too aggressive:**
-- Decrease multiplier: `CONFIG:BOOST:1.3:200:1`
-- Decrease duration: `CONFIG:BOOST:1.5:100:1`
+- Decrease multiplier: `CONFIG:BOOST:1.3:400:1`
+- Decrease duration: `CONFIG:BOOST:1.5:250:1`
 
 **If boost causes motor stalling:**
-- Reduce multiplier: `CONFIG:BOOST:1.2:200:1`
+- Reduce multiplier: `CONFIG:BOOST:1.2:400:1`
 - Check power supply capacity
 - Verify driver current settings
 
 **If boost doesn't seem helpful:**
-- Try longer duration: `CONFIG:BOOST:1.5:400:1`
-- Increase multiplier: `CONFIG:BOOST:1.8:200:1`
+- Try longer duration: `CONFIG:BOOST:1.5:500:1`
+- Increase multiplier: `CONFIG:BOOST:1.8:400:1`
 - Or disable it: `CONFIG:BOOST:1.0:0:0`
 
 ### Step 6.8: Safety Verification
@@ -583,7 +584,7 @@ z
 
 **Reset to safe values:**
 ```
-CONFIG:BOOST:1.5:200:1
+CONFIG:BOOST:1.5:400:1
 ```
 
 **✓ Pass Criteria**: 
@@ -922,9 +923,9 @@ After successful testing, record your system's performance:
 | enabled | 0 or 1 | 1 | 1=enabled, 0=disabled |
 
 **Examples:**
-- Default: `CONFIG:BOOST:1.5:200:1`
-- Conservative: `CONFIG:BOOST:1.2:100:1`
-- Aggressive: `CONFIG:BOOST:1.8:300:1`
+- Default: `CONFIG:BOOST:1.5:400:1`
+- Conservative: `CONFIG:BOOST:1.2:200:1`
+- Aggressive: `CONFIG:BOOST:1.8:500:1`
 - Disabled: `CONFIG:BOOST:1.0:0:0`
 
 ### System Specifications
@@ -934,7 +935,7 @@ After successful testing, record your system's performance:
 - **Acceleration**: 5000 steps/sec²
 - **Step Mode**: Full-step (200 steps/rev)
 - **Sync Threshold**: 100 steps drift alert
-- **Default Boost**: 1.5x for 200ms
+- **Default Boost**: 1.5x for 400ms
 
 ---
 

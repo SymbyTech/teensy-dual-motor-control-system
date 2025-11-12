@@ -35,7 +35,7 @@
 
 // Boost Parameters
 #define BOOST_MULTIPLIER 1.5  // 50% speed boost
-#define BOOST_DURATION 200    // Boost duration in milliseconds
+#define BOOST_DURATION 400    // Boost duration in milliseconds (allows reaching boost speed from zero)
 
 // Sync Parameters
 #define SYNC_CHECK_INTERVAL 1000  // Check sync every 1 second
