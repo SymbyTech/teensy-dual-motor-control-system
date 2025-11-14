@@ -35,7 +35,7 @@
 
 // Boost Parameters
 #define BOOST_MULTIPLIER 1.5  // 50% speed boost
-#define BOOST_DURATION 400    // Boost duration in milliseconds (allows reaching boost speed from zero)
+#define BOOST_DURATION 800    // Boost duration in milliseconds (longer for 8x microstepping acceleration)
 
 // Sync Parameters
 #define SYNC_CHECK_INTERVAL 1000  // Check sync every 1 second
@@ -90,6 +90,7 @@ bool commandReady = false;
 void stepISR_M1();
 void stepISR_M2();
 void updateSpeed(Motor &m);
+void updateTimers();
 void processCommand(String cmd);
 void setSpeed(Motor &m, float speed);
 void setDirection(Motor &m, int dir);
@@ -160,8 +161,11 @@ void loop() {
   
   // Update Speed (Acceleration/Deceleration)
   if (millis() - lastAccelUpdate >= accelUpdateInterval) {
+    // Calculate both motor speeds first
     updateSpeed(motor1);
     updateSpeed(motor2);
+    // Then update timers simultaneously
+    updateTimers();
     lastAccelUpdate = millis();
   }
   
@@ -197,6 +201,8 @@ void stepISR_M2() {
 
 void updateSpeed(Motor &m) {
   if (!m.isRunning) {
+    m.timer.end();
+    m.currentSpeed = 0;
     return;
   }
   
@@ -224,20 +230,26 @@ void updateSpeed(Motor &m) {
   
   // Constrain speed
   m.currentSpeed = constrain(m.currentSpeed, 0, MAX_SPEED);
-  
-  // Update timer frequency
-  if (m.currentSpeed > 0) {
-    float timerPeriod = 1000000.0 / m.currentSpeed;
-    m.timer.end();
-    
-    // Select correct ISR based on motor
-    if (m.pwmPin == M1_PWM_PIN) {
-      m.timer.begin(stepISR_M1, timerPeriod);
-    } else {
-      m.timer.begin(stepISR_M2, timerPeriod);
-    }
+}
+
+void updateTimers() {
+  // Update both motor timers simultaneously for perfect sync
+  // Motor 1
+  if (motor1.currentSpeed > 0 && motor1.isRunning) {
+    float timerPeriod1 = 1000000.0 / motor1.currentSpeed;
+    motor1.timer.end();
+    motor1.timer.begin(stepISR_M1, timerPeriod1);
   } else {
-    m.timer.end();
+    motor1.timer.end();
+  }
+  
+  // Motor 2 - start immediately after Motor 1
+  if (motor2.currentSpeed > 0 && motor2.isRunning) {
+    float timerPeriod2 = 1000000.0 / motor2.currentSpeed;
+    motor2.timer.end();
+    motor2.timer.begin(stepISR_M2, timerPeriod2);
+  } else {
+    motor2.timer.end();
   }
 }
 
@@ -536,17 +548,32 @@ void stopMotor(Motor &m) {
 }
 
 void emergencyStop() {
-  // Immediate stop both motors
+  // Quick ramp-down stop (0.5 second) to prevent mechanical stress
+  Serial.println("EMERGENCY STOP - Ramping down...");
+  
+  // Set both motors to decelerate quickly
+  motor1.targetSpeed = 0;
+  motor2.targetSpeed = 0;
+  
+  // Quick deceleration over 0.5 seconds
+  unsigned long stopStartTime = millis();
+  while ((motor1.currentSpeed > 1 || motor2.currentSpeed > 1) && (millis() - stopStartTime < 500)) {
+    updateSpeed(motor1);
+    updateSpeed(motor2);
+    delay(accelUpdateInterval);
+  }
+  
+  // Force complete stop
   motor1.timer.end();
   motor2.timer.end();
   motor1.isRunning = false;
   motor2.isRunning = false;
   motor1.currentSpeed = 0;
   motor2.currentSpeed = 0;
-  motor1.targetSpeed = 0;
-  motor2.targetSpeed = 0;
   digitalWrite(M1_PWM_PIN, LOW);
   digitalWrite(M2_PWM_PIN, LOW);
+  
+  Serial.println("Motors stopped safely.");
 }
 
 void printStatus() {

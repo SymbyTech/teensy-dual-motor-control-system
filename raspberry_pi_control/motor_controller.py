@@ -196,12 +196,13 @@ class DualMotorController:
         response = self.send_command("SYNC")
         return response is not None
     
-    def configure_boost(self, multiplier: float, duration: int, enabled: bool = True) -> bool:
-        """Configure boost parameters
+    def configure_boost(self, multiplier: float, duration: int, enabled: bool) -> bool:
+        """
+        Configure boost parameters
         
         Args:
-            multiplier: Speed multiplier (1.0 - 2.0)
-            duration: Boost duration in milliseconds (50-500)
+            multiplier: Speed multiplier (1.0-2.0)
+            duration: Boost duration in milliseconds (50-1000)
             enabled: Enable/disable boost
         """
         enabled_val = 1 if enabled else 0

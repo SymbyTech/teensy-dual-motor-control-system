@@ -1,0 +1,606 @@
+================================================================
+DUAL MOTOR CONTROL SYSTEM - COMPLETE TEST INSTRUCTIONS
+8x Microstepping Verification
+================================================================
+
+PREPARATION
+================================================================
+1. Verify DIP switches on BOTH drivers:
+   SW5: ON, SW6: ON, SW7: ON, SW8: OFF
+2. Power on motor supply (48V)
+3. Connect Teensy to Raspberry Pi via USB
+4. Open terminal on Raspberry Pi
+
+Start Python Controller:
+cd raspberry_pi_control
+python3 motor_controller.py
+
+Expected startup:
+  ✓ Connected to Teensy at /dev/ttyACM0
+  ✓ System ready!
+  Current speed: 2000 steps/sec
+  Ready for commands...
+
+
+================================================================
+TEST SERIES 1: BASIC FUNCTIONALITY (5 min)
+================================================================
+
+TEST 1.1: System Startup
+--------------------------
+✓ Python controller started successfully
+✓ No connection errors
+✓ Speed shows 2000 steps/sec
+
+RECORD: System startup - PASS / FAIL
+
+
+TEST 1.2: Low Speed Forward/Backward
+--------------------------------------
+Command: f
+(Wait 3 seconds - listen carefully)
+Command: w
+Command: s
+(Wait 3 seconds)
+Command: w
+
+LISTEN FOR:
+- Clicking sounds? YES / NO
+- Grinding sounds? YES / NO
+- Pulsing sounds? YES / NO
+- Smooth humming? YES / NO
+
+RECORD: Low speed movement - PASS / FAIL
+
+
+TEST 1.3: Speed Status Check
+------------------------------
+Command: ?
+
+CHECK OUTPUT:
+- Both motors reporting? YES / NO
+- Motor 1 Running: Should show NO
+- Motor 2 Running: Should show NO
+- Sync Drift: _____ steps (should be < 100)
+
+RECORD: Status reporting - PASS / FAIL
+
+
+================================================================
+TEST SERIES 2: RESONANCE CHECK (10 min) *** CRITICAL ***
+================================================================
+
+TEST 2.1: Old Problem Speed (2000 steps/sec)
+----------------------------------------------
+Command: f
+(Currently at 2000 - listen for 10 seconds)
+Command: w
+
+THIS SPEED USED TO PULSE - NOW IT SHOULD BE SMOOTH
+
+RECORD:
+Pulsing at 2000? YES / NO
+Vibration at 2000? YES / NO
+Result: PASS / FAIL
+
+
+TEST 2.2: Progressive Speed Increase
+--------------------------------------
+Command: f
+Command: +    (now 3000 steps/sec)
+(Listen 5 seconds - any pulsing?)
+Pulsing? YES / NO
+
+Command: +    (now 4000 steps/sec)
+(Listen 5 seconds)
+Pulsing? YES / NO
+
+Command: +    (now 5000 steps/sec)
+(Listen 5 seconds)
+Pulsing? YES / NO
+
+Command: +    (now 6000 steps/sec)
+(Listen 5 seconds)
+Pulsing? YES / NO
+
+Command: w
+
+RECORD:
+First speed where pulsing occurs: _____ steps/sec (or NONE)
+Vibration level: Low / Medium / High / None
+Result: PASS / FAIL
+
+
+TEST 2.3: High Speed Test (10000 steps/sec)
+---------------------------------------------
+Command: f
+Command: + + + + + + + +    (press + eight times to reach 10000)
+(Run for 10 seconds)
+Command: w
+
+THIS IS 2x YOUR OLD MAX SPEED!
+
+RECORD:
+Smooth at 10000? YES / NO
+Vibration: Low / Medium / High / None
+Motor temperature: Cool / Warm / Hot
+Result: PASS / FAIL
+
+
+TEST 2.4: Maximum Speed Test (20000 steps/sec)
+------------------------------------------------
+Command: f
+(Keep pressing + until you reach 20000 - may take ~18 presses)
+Command: ?    (verify speed is 20000)
+(Run for 10 seconds)
+Command: w
+
+RECORD:
+Smooth at 20000? YES / NO
+Stalling? YES / NO
+Losing steps? YES / NO
+Motor temperature: Cool / Warm / Hot
+Max smooth speed achieved: _____ steps/sec
+Result: PASS / FAIL
+
+
+================================================================
+TEST SERIES 3: DIRECTION CHANGES (10 min)
+================================================================
+
+TEST 3.1: Low Speed Direction Change (2000 steps/sec)
+-------------------------------------------------------
+Command: f
+(Wait 2 seconds)
+Command: s
+(Observe - should change smoothly)
+(Wait 2 seconds)
+Command: w
+
+RECORD:
+Smooth transition? YES / NO
+Any grinding? YES / NO
+Result: PASS / FAIL
+
+
+TEST 3.2: Medium Speed Direction Change (4000 steps/sec)
+----------------------------------------------------------
+Command: f
+Command: + +    (now 4000 steps/sec)
+(Wait 3 seconds)
+Command: s
+
+LOOK FOR THIS MESSAGE:
+"Motor 1 slowing for direction change..."
+"Motor 2 slowing for direction change..."
+
+Did you see slowdown message? YES / NO
+
+OBSERVE:
+- Motors slow down to ~300 steps/sec
+- Direction changes
+- Motors ramp back up to 4000
+
+Command: w
+
+RECORD:
+Auto-slowdown triggered? YES / NO
+Smooth transition? YES / NO
+Result: PASS / FAIL
+
+
+TEST 3.3: High Speed Direction Change (7000 steps/sec)
+--------------------------------------------------------
+Command: f
+Command: + + + + +    (now 7000 steps/sec)
+(Wait 3 seconds)
+Command: s
+(Watch for slowdown message)
+Command: w
+
+RECORD:
+Auto-slowdown triggered? YES / NO
+Grinding sounds? YES / NO
+Result: PASS / FAIL
+
+
+TEST 3.4: Rapid Direction Changes (Stress Test)
+-------------------------------------------------
+Command: f
+Command: + + +    (5000 steps/sec)
+(Wait 2 seconds)
+Command: s
+(Wait 2 seconds)
+Command: f
+(Wait 2 seconds)
+Command: s
+(Wait 2 seconds)
+Command: w
+
+RECORD:
+All changes smooth? YES / NO
+Mechanical stress sounds? YES / NO
+Motors stayed synced? YES / NO
+Result: PASS / FAIL
+
+
+================================================================
+TEST SERIES 4: BOOST FUNCTION (10 min)
+================================================================
+
+TEST 4.1: Boost vs Normal Comparison
+--------------------------------------
+Command: a    (normal spin left)
+(Count to 3)
+Command: w
+(Wait 2 seconds)
+
+Command: z    (boosted spin left)
+(Should feel MORE AGGRESSIVE!)
+(Count to 3)
+Command: w
+
+RECORD:
+Clear difference between normal and boost? YES / NO
+Boost more aggressive? YES / NO
+Result: PASS / FAIL
+
+
+TEST 4.2: Boost Status Monitoring
+-----------------------------------
+Command: z    (boost spin left)
+Command: ?    (press ? IMMEDIATELY - within 0.5 seconds)
+
+CHECK OUTPUT:
+Boost Active: Should show YES
+Current Speed: Should be ~3000
+
+(Wait 1 second)
+Command: ?
+
+CHECK OUTPUT:
+Boost Active: Should show NO
+Current Speed: Should be 2000
+
+RECORD:
+Boost activated correctly? YES / NO
+Boost expired after 400ms? YES / NO
+Result: PASS / FAIL
+
+
+TEST 4.3: All Boost Directions
+--------------------------------
+Command: v    (boost forward)
+(Wait 1 second)
+Command: w
+
+Command: x    (boost backward)
+(Wait 1 second)
+Command: w
+
+Command: z    (boost spin left)
+(Wait 1 second)
+Command: w
+
+Command: c    (boost spin right)
+(Wait 1 second)
+Command: w
+
+RECORD:
+All boost commands work? YES / NO
+Result: PASS / FAIL
+
+
+TEST 4.4: Boost From Stationary (FIXED ISSUE TEST)
+----------------------------------------------------
+Make sure motors are stopped!
+
+Command: z    (boosted spin from zero)
+(Observe - should see VISIBLE acceleration burst!)
+(Wait 2 seconds)
+Command: w
+
+BEFORE: Boost wasn't visible from standstill
+NOW: Should see clear speed burst
+
+RECORD:
+Visible boost from standstill? YES / NO
+Result: PASS / FAIL
+
+
+================================================================
+TEST SERIES 5: POINT TURN LOGIC (5 min)
+================================================================
+
+TEST 5.1: Spin Left
+--------------------
+Command: a    (spin left at 2000)
+(VERIFY: M1 backward, M2 forward - robot spins left in place)
+(Wait 3 seconds)
+Command: w
+
+RECORD:
+Point turn working? YES / NO
+Both motors same speed? YES / NO
+Result: PASS / FAIL
+
+
+TEST 5.2: Spin Right
+---------------------
+Command: d    (spin right at 2000)
+(VERIFY: M1 forward, M2 backward - robot spins right in place)
+(Wait 3 seconds)
+Command: w
+
+RECORD:
+Point turn working? YES / NO
+Opposite of spin left? YES / NO
+Result: PASS / FAIL
+
+
+TEST 5.3: Variable Speed Spins
+--------------------------------
+Command: a    (start spinning left)
+Command: +    (increase to 3000)
+Command: +    (increase to 4000)
+Command: +    (increase to 5000)
+(Wait 2 seconds)
+Command: w
+
+RECORD:
+Smooth speed changes during spin? YES / NO
+Result: PASS / FAIL
+
+
+================================================================
+TEST SERIES 6: SYNCHRONIZATION (10 min)
+================================================================
+
+TEST 6.1: Sync Check After Forward Run
+----------------------------------------
+Command: f
+Command: + + +    (5000 steps/sec)
+(Run for 30 seconds - let it run!)
+Command: w
+Command: ?
+
+CHECK "Sync Drift" line:
+Sync Drift: _____ steps
+
+RECORD:
+Drift after 30 seconds: _____ steps
+Acceptable (< 50)? YES / NO
+Result: PASS / FAIL
+
+
+TEST 6.2: Sync Under Mixed Movements
+--------------------------------------
+Command: f
+(Wait 5 seconds)
+Command: s
+(Wait 5 seconds)
+Command: a
+(Wait 5 seconds)
+Command: d
+(Wait 5 seconds)
+Command: w
+Command: ?
+
+CHECK "Sync Drift" line:
+Sync Drift: _____ steps
+
+RECORD:
+Drift after mixed movements: _____ steps
+Acceptable (< 100)? YES / NO
+Result: PASS / FAIL
+
+
+TEST 6.3: Manual Sync Reset
+-----------------------------
+Command: ?    (note current drift: _____ steps)
+Command: y    (sync motors)
+Command: ?    (check drift again)
+
+Expected output after sync:
+"Motors synchronized to position 0"
+"--- Sync Drift: 0 steps ---"
+
+RECORD:
+Drift reset to 0? YES / NO
+Result: PASS / FAIL
+
+
+TEST 6.4: Sync Under Boost
+----------------------------
+Command: z    (boost spin left)
+(Wait 2 seconds)
+Command: c    (boost spin right)
+(Wait 2 seconds)
+Command: v    (boost forward)
+(Wait 2 seconds)
+Command: x    (boost backward)
+(Wait 2 seconds)
+Command: w
+Command: ?
+
+CHECK "Sync Drift" line:
+Sync Drift: _____ steps
+
+RECORD:
+Drift under aggressive boost: _____ steps
+Acceptable (< 100)? YES / NO
+Result: PASS / FAIL
+
+
+================================================================
+TEST SERIES 7: ENDURANCE & STABILITY (10 min)
+================================================================
+
+TEST 7.1: Extended Run at Medium Speed
+----------------------------------------
+Command: f
+Command: + +    (4000 steps/sec)
+(Let run for 2 FULL MINUTES - set a timer!)
+
+OBSERVE DURING RUN:
+- Sound consistent? YES / NO
+- Vibration consistent? YES / NO
+- Motors getting hot? YES / NO
+
+After 2 minutes:
+Command: ?
+Sync Drift: _____ steps
+
+Command: w
+
+Touch motors carefully:
+Motor temperature: Cool / Warm / Hot / Too hot to touch
+
+RECORD:
+Consistent speed for 2 min? YES / NO
+Drift after 2 min: _____ steps
+Motor temp: Cool / Warm / Hot
+Result: PASS / FAIL
+
+
+TEST 7.2: Speed Ramping Endurance
+-----------------------------------
+Command: f
+
+Press + every 10 seconds:
+2000 → 3000 → 4000 → 5000 → 6000 → 7000 → 8000
+
+Then press - every 10 seconds:
+8000 → 7000 → 6000 → 5000 → 4000 → 3000 → 2000
+
+Command: w
+
+RECORD:
+All speed changes smooth? YES / NO
+Any stuttering? YES / NO
+Motors stayed synced? YES / NO
+Result: PASS / FAIL
+
+
+TEST 7.3: Continuous Spin Test
+--------------------------------
+Command: a    (spin left)
+Command: + + + +    (6000 steps/sec)
+(Let spin for 1 FULL MINUTE)
+Command: ?
+Sync Drift: _____ steps
+Command: w
+
+RECORD:
+Vibration buildup? YES / NO
+Consistent sound? YES / NO
+Drift after 1 min spin: _____ steps
+Result: PASS / FAIL
+
+
+================================================================
+TEST SERIES 8: EDGE CASES & SAFETY (5 min)
+================================================================
+
+TEST 8.1: Emergency Stop
+-------------------------
+Command: f
+Command: + + + + + +    (high speed)
+Command: e    (EMERGENCY STOP)
+
+OBSERVE:
+- Immediate stop? YES / NO
+- No deceleration ramp? YES / NO
+- System still responsive? YES / NO
+
+RECORD:
+Emergency stop working? YES / NO
+Result: PASS / FAIL
+
+
+TEST 8.2: Max Speed + Direction Change
+----------------------------------------
+Command: f
+Command: + + + + + + + + +    (near max speed)
+(Wait 2 seconds)
+Command: s    (direction change at high speed)
+
+OBSERVE:
+- Should auto-slow significantly
+- Slowdown message shown? YES / NO
+
+Command: w
+
+RECORD:
+Safe direction change? YES / NO
+Auto-slowdown triggered? YES / NO
+Result: PASS / FAIL
+
+
+TEST 8.3: Rapid Command Sequence
+----------------------------------
+Enter these quickly, one after another:
+Command: f
+Command: s
+Command: a
+Command: d
+Command: w
+
+OBSERVE:
+- All commands processed? YES / NO
+- No crashes or errors? YES / NO
+- System stable? YES / NO
+
+RECORD:
+Rapid commands handled? YES / NO
+Result: PASS / FAIL
+
+
+================================================================
+FINAL VALIDATION CHECKLIST
+================================================================
+
+After completing all tests, mark each:
+
+[ ] No pulsing or resonance at any speed (100-20000)
+[ ] Direction changes smooth at all speeds
+[ ] Boost function working (visible from standstill)
+[ ] Point turns work correctly (left/right)
+[ ] Sync drift stays < 100 steps under normal use
+[ ] Motors run cool enough to touch after extended use
+[ ] No grinding, clicking, or mechanical stress sounds
+[ ] Emergency stop works reliably
+[ ] System stable over extended runs
+[ ] Both motors perform identically
+
+
+================================================================
+FILL OUT TEST_RESULTS.txt WITH YOUR BENCHMARKS
+================================================================
+
+Max Smooth Speed Achieved: _____________ steps/sec
+Typical Sync Drift (30 sec run): _____________ steps
+Motor Temp After 2 Min Run: _____________ °C (or warm/hot)
+Boost Effectiveness: Noticeable YES / NO
+Direction Change Quality: Smooth / Acceptable / Rough
+Overall Smoothness: 1-10 score: _____________
+
+
+================================================================
+OVERALL RESULT
+================================================================
+
+Total Tests Run: _____
+Tests Passed: _____
+Tests Failed: _____
+
+FINAL VERDICT: PASS / FAIL / NEEDS TUNING
+
+System Ready for Production: YES / NO
+
+
+================================================================
+END OF TEST INSTRUCTIONS
+================================================================
+
+Good luck with testing! 🚀
