@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dual Motor Joystick Control</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .status-panel {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .status-item {
+            background: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .status-label {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-bottom: 5px;
+        }
+        
+        .status-value {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .joystick-panel {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .joystick-display {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .axis-display {
+            background: rgba(0,0,0,0.2);
+            padding: 20px;
+            border-radius: 8px;
+        }
+        
+        .axis-bar {
+            width: 100%;
+            height: 30px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            position: relative;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        
+        .axis-indicator {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff88, #00cc6a);
+            border-radius: 15px;
+            transition: width 0.05s ease;
+            position: relative;
+        }
+        
+        .axis-value {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .controls {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        button {
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .connection-status {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .connected {
+            background: #00ff88;
+            box-shadow: 0 0 10px #00ff88;
+        }
+        
+        .disconnected {
+            background: #ff4444;
+            box-shadow: 0 0 10px #ff4444;
+        }
+        
+        .log-panel {
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        
+        .log-entry {
+            padding: 5px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+        
+        .log-time {
+            color: #00ff88;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 Dual Motor Joystick Control</h1>
+        
+        <!-- Status Panel -->
+        <div class="status-panel">
+            <h2>
+                <span class="connection-status disconnected" id="wsStatus"></span>
+                System Status
+            </h2>
+            <div class="status-grid">
+                <div class="status-item">
+                    <div class="status-label">Speed (steps/sec)</div>
+                    <div class="status-value" id="currentSpeed">0</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Direction</div>
+                    <div class="status-value" id="direction">STOPPED</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Joystick</div>
+                    <div class="status-value" id="joystickStatus">Not Connected</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Motor Sync Drift</div>
+                    <div class="status-value" id="syncDrift">--</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Joystick Display -->
+        <div class="joystick-panel">
+            <h2>Logitech Pro 3DS Controls</h2>
+            <div class="joystick-display">
+                <div class="axis-display">
+                    <strong>X-Axis (Left/Right)</strong>
+                    <div class="axis-bar">
+                        <div class="axis-indicator" id="xAxisBar" style="width: 50%;">
+                            <span class="axis-value" id="xAxisValue">0.00</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="axis-display">
+                    <strong>Y-Axis (Forward/Backward)</strong>
+                    <div class="axis-bar">
+                        <div class="axis-indicator" id="yAxisBar" style="width: 50%;">
+                            <span class="axis-value" id="yAxisValue">0.00</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="axis-display">
+                    <strong>Throttle (Speed Control)</strong>
+                    <div class="axis-bar">
+                        <div class="axis-indicator" id="throttleBar" style="width: 50%;">
+                            <span class="axis-value" id="throttleValue">0%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="axis-display">
+                    <strong>Calculated Speed</strong>
+                    <div class="axis-bar">
+                        <div class="axis-indicator" id="speedBar" style="width: 0%;">
+                            <span class="axis-value" id="speedValue">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Manual Controls -->
+        <div class="controls">
+            <h2>Manual Controls</h2>
+            <div class="button-grid">
+                <button class="btn-primary" onclick="sendCommand('STOP')">⏸ Stop</button>
+                <button class="btn-danger" onclick="sendCommand('ESTOP')">🛑 E-Stop</button>
+                <button class="btn-success" onclick="sendCommand('SYNC')">🔄 Sync Motors</button>
+                <button class="btn-primary" onclick="sendCommand('STATUS')">📊 Get Status</button>
+            </div>
+        </div>
+        
+        <!-- Log Panel -->
+        <div class="log-panel" id="logPanel">
+            <div class="log-entry">
+                <span class="log-time">--:--:--</span>
+                <span>System initialized. Waiting for connections...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const WS_URL = 'ws://192.168.1.43:8765'; // Raspberry Pi WebSocket server
+        const DEADZONE = 0.1;  // Ignore joystick inputs below this threshold
+        const MAX_SPEED = 20000;  // Maximum motor speed
+        const UPDATE_RATE = 50;  // Update every 50ms (20Hz)
+        
+        // State
+        let ws = null;
+        let gamepad = null;
+        let lastUpdate = 0;
+        let lastCommand = null;
+        
+        // Initialize WebSocket connection
+        function connectWebSocket() {
+            addLog('Connecting to Raspberry Pi...');
+            
+            ws = new WebSocket(WS_URL);
+            
+            ws.onopen = () => {
+                addLog('Connected to Raspberry Pi!', 'success');
+                document.getElementById('wsStatus').className = 'connection-status connected';
+            };
+            
+            ws.onclose = () => {
+                addLog('Disconnected from Raspberry Pi', 'error');
+                document.getElementById('wsStatus').className = 'connection-status disconnected';
+                setTimeout(connectWebSocket, 3000);  // Reconnect after 3 seconds
+            };
+            
+            ws.onerror = (error) => {
+                addLog('WebSocket error: ' + error, 'error');
+            };
+            
+            ws.onmessage = (event) => {
+                handleMessage(event.data);
+            };
+        }
+        
+        // Handle incoming messages from RPi
+        function handleMessage(data) {
+            try {
+                const msg = JSON.parse(data);
+                
+                if (msg.type === 'status') {
+                    document.getElementById('currentSpeed').textContent = msg.speed || 0;
+                    document.getElementById('direction').textContent = msg.direction || 'STOPPED';
+                    document.getElementById('syncDrift').textContent = msg.syncDrift || '--';
+                } else if (msg.type === 'response') {
+                    addLog('RPi: ' + msg.message);
+                }
+            } catch (e) {
+                addLog('Received: ' + data);
+            }
+        }
+        
+        // Send command to RPi
+        function sendCommand(command) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addLog('Not connected to Raspberry Pi!', 'error');
+                return;
+            }
+            
+            const message = JSON.stringify({
+                type: 'command',
+                command: command
+            });
+            
+            ws.send(message);
+            addLog('Sent: ' + command, 'info');
+        }
+        
+        // Joystick scanning
+        function scanGamepads() {
+            const gamepads = navigator.getGamepads();
+            
+            for (let i = 0; i < gamepads.length; i++) {
+                if (gamepads[i] && gamepads[i].id.toLowerCase().includes('logitech')) {
+                    if (!gamepad) {
+                        gamepad = gamepads[i];
+                        addLog('Joystick connected: ' + gamepad.id, 'success');
+                        document.getElementById('joystickStatus').textContent = 'Connected';
+                    }
+                    return gamepads[i];
+                }
+            }
+            
+            if (gamepad) {
+                addLog('Joystick disconnected', 'warning');
+                document.getElementById('joystickStatus').textContent = 'Not Connected';
+                gamepad = null;
+            }
+            
+            return null;
+        }
+        
+        // Process joystick input
+        function processJoystick() {
+            const gp = scanGamepads();
+            
+            if (!gp) return;
+            
+            // Read axes
+            const xAxis = gp.axes[0];  // Left/Right
+            const yAxis = gp.axes[1];  // Forward/Backward
+            const throttle = gp.axes[3];  // Throttle (usually -1 to 1)
+            
+            // Update display
+            updateAxisDisplay('x', xAxis);
+            updateAxisDisplay('y', yAxis);
+            updateThrottleDisplay(throttle);
+            
+            // Apply deadzone
+            const x = Math.abs(xAxis) > DEADZONE ? xAxis : 0;
+            const y = Math.abs(yAxis) > DEADZONE ? yAxis : 0;
+            
+            // Convert throttle from -1..1 to 0..1
+            const throttleNorm = (throttle + 1) / 2;
+            
+            // Calculate speed (0 to MAX_SPEED based on throttle)
+            const speed = Math.floor(throttleNorm * MAX_SPEED);
+            
+            // Update speed display
+            document.getElementById('speedBar').style.width = (throttleNorm * 100) + '%';
+            document.getElementById('speedValue').textContent = speed;
+            
+            // Determine command based on joystick position
+            const command = calculateMotorCommand(x, y, speed);
+            
+            // Only send if command changed or enough time passed
+            const now = Date.now();
+            if (command !== lastCommand || (now - lastUpdate) > UPDATE_RATE) {
+                sendMotorCommand(command);
+                lastCommand = command;
+                lastUpdate = now;
+            }
+        }
+        
+        // Calculate motor command from joystick input
+        function calculateMotorCommand(x, y, speed) {
+            if (speed < 100) {
+                return { type: 'stop' };
+            }
+            
+            // Forward/Backward with steering
+            if (Math.abs(y) > Math.abs(x)) {
+                if (y < 0) {
+                    // Forward
+                    if (Math.abs(x) > 0.3) {
+                        // Turn while moving forward
+                        return {
+                            type: 'differential',
+                            direction: 'forward',
+                            leftSpeed: speed * (1 - x * 0.5),
+                            rightSpeed: speed * (1 + x * 0.5)
+                        };
+                    } else {
+                        return { type: 'forward', speed: speed };
+                    }
+                } else {
+                    // Backward
+                    if (Math.abs(x) > 0.3) {
+                        return {
+                            type: 'differential',
+                            direction: 'backward',
+                            leftSpeed: speed * (1 + x * 0.5),
+                            rightSpeed: speed * (1 - x * 0.5)
+                        };
+                    } else {
+                        return { type: 'backward', speed: speed };
+                    }
+                }
+            }
+            // Point turn (spin in place)
+            else if (Math.abs(x) > 0.5) {
+                if (x > 0) {
+                    return { type: 'spin', direction: 'right', speed: speed };
+                } else {
+                    return { type: 'spin', direction: 'left', speed: speed };
+                }
+            }
+            
+            return { type: 'stop' };
+        }
+        
+        // Send motor command to RPi
+        function sendMotorCommand(command) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            
+            const message = JSON.stringify({
+                type: 'motor_control',
+                command: command
+            });
+            
+            ws.send(message);
+            
+            // Update UI
+            if (command.type === 'forward') {
+                document.getElementById('direction').textContent = 'FORWARD';
+                document.getElementById('currentSpeed').textContent = command.speed;
+            } else if (command.type === 'backward') {
+                document.getElementById('direction').textContent = 'BACKWARD';
+                document.getElementById('currentSpeed').textContent = command.speed;
+            } else if (command.type === 'spin') {
+                document.getElementById('direction').textContent = 'SPIN ' + command.direction.toUpperCase();
+                document.getElementById('currentSpeed').textContent = command.speed;
+            } else if (command.type === 'stop') {
+                document.getElementById('direction').textContent = 'STOPPED';
+                document.getElementById('currentSpeed').textContent = 0;
+            }
+        }
+        
+        // Update axis display
+        function updateAxisDisplay(axis, value) {
+            const normalized = (value + 1) / 2;  // Convert -1..1 to 0..1
+            const percentage = normalized * 100;
+            
+            if (axis === 'x') {
+                document.getElementById('xAxisBar').style.width = percentage + '%';
+                document.getElementById('xAxisValue').textContent = value.toFixed(2);
+            } else if (axis === 'y') {
+                document.getElementById('yAxisBar').style.width = percentage + '%';
+                document.getElementById('yAxisValue').textContent = value.toFixed(2);
+            }
+        }
+        
+        // Update throttle display
+        function updateThrottleDisplay(value) {
+            const normalized = (value + 1) / 2;  // Convert -1..1 to 0..1
+            const percentage = normalized * 100;
+            
+            document.getElementById('throttleBar').style.width = percentage + '%';
+            document.getElementById('throttleValue').textContent = Math.floor(percentage) + '%';
+        }
+        
+        // Add log entry
+        function addLog(message, type = 'info') {
+            const logPanel = document.getElementById('logPanel');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            const time = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="log-time">${time}</span><span>${message}</span>`;
+            
+            logPanel.appendChild(entry);
+            logPanel.scrollTop = logPanel.scrollHeight;
+            
+            // Keep only last 50 entries
+            while (logPanel.children.length > 50) {
+                logPanel.removeChild(logPanel.firstChild);
+            }
+        }
+        
+        // Initialize
+        window.addEventListener('load', () => {
+            connectWebSocket();
+            
+            // Start joystick polling
+            setInterval(processJoystick, 50);  // 20Hz update rate
+            
+            // Listen for gamepad connection events
+            window.addEventListener('gamepadconnected', (e) => {
+                addLog('Gamepad connected: ' + e.gamepad.id, 'success');
+            });
+            
+            window.addEventListener('gamepaddisconnected', (e) => {
+                addLog('Gamepad disconnected: ' + e.gamepad.id, 'warning');
+                gamepad = null;
+            });
+        });
+    </script>
+</body>
+</html>

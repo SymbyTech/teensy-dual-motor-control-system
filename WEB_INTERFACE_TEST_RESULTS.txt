@@ -1,0 +1,596 @@
+================================================================
+WEB JOYSTICK INTERFACE - TEST RESULTS
+================================================================
+Date: _______________
+Tester: _______________
+RPi IP: 192.168.1.43
+
+================================================================
+SETUP VERIFICATION
+================================================================
+
+[ ] Raspberry Pi powered on and connected to network
+[ ] Teensy 4.1 connected to RPi via USB (/dev/ttyACM0)
+[ ] Motor power supply ON (48V)
+[ ] Both drivers configured for 8x microstepping
+[ ] WebSocket server running on RPi (port 8765)
+[ ] Topside computer on same WiFi network (192.168.1.x)
+[ ] Logitech Pro 3DS connected to topside computer via USB
+[ ] Browser opened to: http://192.168.1.43/joystick_control.html
+
+
+================================================================
+CONNECTION TESTS
+================================================================
+
+TEST 1: WebSocket Connection
+----------------------------
+Status Indicator Color: 🟢 Green / 🔴 Red
+
+If Green:
+✓ WebSocket connected successfully
+Connection Time: _____ seconds
+
+If Red:
+Issue: ________________________________________________
+Troubleshooting steps taken: ___________________________
+_______________________________________________________
+
+Result: PASS / FAIL
+
+
+TEST 2: Joystick Detection
+----------------------------
+Joystick Status Display: Connected / Not Connected
+
+If Connected:
+Joystick Name: _________________________________________
+Browser: Chrome / Edge / Firefox / Safari
+
+If Not Connected:
+Issue: ________________________________________________
+USB port changed? YES / NO
+Joystick moved to activate? YES / NO
+
+Result: PASS / FAIL
+
+
+TEST 3: Real-time Status Updates
+----------------------------------
+Click "Get Status" button
+
+Status received? YES / NO
+Response time: _____ milliseconds
+Current speed shown: _____ steps/sec
+Direction shown: ________________
+Sync drift shown: _____ steps
+
+Result: PASS / FAIL
+
+
+================================================================
+JOYSTICK AXIS VERIFICATION
+================================================================
+
+TEST 4: X-Axis (Left/Right Steering)
+--------------------------------------
+Move joystick LEFT:
+X-Axis Value: ______ (should be negative)
+Bar position: Left / Center / Right
+
+Move joystick RIGHT:
+X-Axis Value: ______ (should be positive)
+Bar position: Left / Center / Right
+
+Center position:
+X-Axis Value: ______ (should be ~0.00)
+Bar position: Left / Center / Right
+
+Result: PASS / FAIL
+
+
+TEST 5: Y-Axis (Forward/Backward)
+-----------------------------------
+Push joystick FORWARD:
+Y-Axis Value: ______ (should be negative)
+Bar position: ____________
+
+Pull joystick BACKWARD:
+Y-Axis Value: ______ (should be positive)
+Bar position: ____________
+
+Center position:
+Y-Axis Value: ______ (should be ~0.00)
+Bar position: ____________
+
+Result: PASS / FAIL
+
+
+TEST 6: Throttle (Speed Control)
+----------------------------------
+Throttle at MINIMUM:
+Throttle Value: ______ % (should be 0%)
+Calculated Speed: _____ steps/sec (should be 0)
+
+Throttle at 25%:
+Throttle Value: ______ %
+Calculated Speed: _____ steps/sec (should be ~5000)
+
+Throttle at 50%:
+Throttle Value: ______ %
+Calculated Speed: _____ steps/sec (should be ~10000)
+
+Throttle at 75%:
+Throttle Value: ______ %
+Calculated Speed: _____ steps/sec (should be ~15000)
+
+Throttle at MAXIMUM:
+Throttle Value: ______ %
+Calculated Speed: _____ steps/sec (should be 20000)
+
+Result: PASS / FAIL
+
+
+================================================================
+MANUAL CONTROL TESTS
+================================================================
+
+TEST 7: Stop Button
+--------------------
+1. Set throttle to 50%
+2. Push forward on joystick (motors should move)
+3. Click "Stop" button
+
+Motors stopped? YES / NO
+Response time: _____ seconds
+Log shows command sent? YES / NO
+
+Result: PASS / FAIL
+
+
+TEST 8: Emergency Stop Button
+-------------------------------
+1. Set throttle to 75%
+2. Push forward on joystick
+3. Click "E-Stop" button
+
+Motors stopped? YES / NO
+Deceleration smooth? YES / NO (should ramp over 0.5 sec)
+Response time: _____ seconds
+Log shows "EMERGENCY STOP"? YES / NO
+
+Result: PASS / FAIL
+
+
+TEST 9: Sync Motors Button
+----------------------------
+Click "Sync Motors" button
+
+Log shows command sent? YES / NO
+Response received? YES / NO
+Sync drift reset to 0? YES / NO
+
+Result: PASS / FAIL
+
+
+================================================================
+BASIC MOVEMENT TESTS
+================================================================
+
+TEST 10: Forward Movement
+---------------------------
+Throttle: 25%
+Joystick: Push forward (Y-axis)
+
+Motors running? YES / NO
+Direction display: FORWARD / Other: __________
+Both motors same speed? YES / NO
+Movement smooth? YES / NO
+Pulsing sounds? YES / NO
+
+Current Speed Shown: _____ steps/sec
+Expected (~5000): _____ steps/sec
+
+Result: PASS / FAIL
+
+
+TEST 11: Backward Movement
+----------------------------
+Throttle: 25%
+Joystick: Pull backward (Y-axis)
+
+Motors running? YES / NO
+Direction display: BACKWARD / Other: __________
+Both motors same speed? YES / NO
+Movement smooth? YES / NO
+
+Current Speed Shown: _____ steps/sec
+Expected (~5000): _____ steps/sec
+
+Result: PASS / FAIL
+
+
+TEST 12: Variable Speed Forward
+---------------------------------
+Start: Throttle at 10% → Push forward
+Wait 2 seconds
+
+Increase: Throttle to 30%
+Speed increased smoothly? YES / NO
+
+Increase: Throttle to 50%
+Speed increased smoothly? YES / NO
+
+Increase: Throttle to 75%
+Speed increased smoothly? YES / NO
+
+Return throttle to 0%
+Motors stopped? YES / NO
+
+Result: PASS / FAIL
+
+
+================================================================
+STEERING & TURNING TESTS
+================================================================
+
+TEST 13: Gradual Turn Left (While Moving)
+-------------------------------------------
+Throttle: 50%
+Joystick: Push forward + slight tilt LEFT
+
+Direction display: DIFF FORWARD / Other: __________
+Left motor slower than right? YES / NO
+Turn arc smooth? YES / NO
+Jerking? YES / NO
+
+Observations: ________________________________________
+_______________________________________________________
+
+Result: PASS / FAIL
+
+
+TEST 14: Gradual Turn Right (While Moving)
+--------------------------------------------
+Throttle: 50%
+Joystick: Push forward + slight tilt RIGHT
+
+Direction display: DIFF FORWARD / Other: __________
+Right motor slower than left? YES / NO
+Turn arc smooth? YES / NO
+Jerking? YES / NO
+
+Observations: ________________________________________
+_______________________________________________________
+
+Result: PASS / FAIL
+
+
+TEST 15: Point Turn Left (Spin)
+---------------------------------
+Throttle: 30%
+Joystick: Center Y-axis + HARD LEFT on X-axis
+
+Direction display: SPIN LEFT / Other: __________
+Motor 1 backward? YES / NO
+Motor 2 forward? YES / NO
+Spinning in place? YES / NO
+Smooth rotation? YES / NO
+
+Result: PASS / FAIL
+
+
+TEST 16: Point Turn Right (Spin)
+----------------------------------
+Throttle: 30%
+Joystick: Center Y-axis + HARD RIGHT on X-axis
+
+Direction display: SPIN RIGHT / Other: __________
+Motor 1 forward? YES / NO
+Motor 2 backward? YES / NO
+Spinning in place? YES / NO
+Smooth rotation? YES / NO
+
+Result: PASS / FAIL
+
+
+================================================================
+RESPONSE TIME & LATENCY TESTS
+================================================================
+
+TEST 17: Command Latency
+--------------------------
+Throttle: 50%
+
+Push forward → Time until motors start: _____ ms
+Expected: < 200ms
+
+Stop (center) → Time until motors stop: _____ ms
+Expected: < 200ms
+
+Push backward → Time until motors reverse: _____ ms
+Expected: < 500ms (includes slowdown)
+
+Acceptable latency? YES / NO
+
+Result: PASS / FAIL
+
+
+TEST 18: Real-time Responsiveness
+-----------------------------------
+Throttle: 50%
+
+Forward → Left → Right → Backward → Stop
+(Do this sequence quickly)
+
+All commands executed? YES / NO
+Missed commands? YES / NO (count: _____)
+Lag noticeable? YES / NO
+System kept up? YES / NO
+
+Result: PASS / FAIL
+
+
+================================================================
+SYNCHRONIZATION MONITORING
+================================================================
+
+TEST 19: Sync Drift During Operation
+--------------------------------------
+Starting sync drift: _____ steps
+
+Run forward at 50% for 30 seconds
+Ending sync drift: _____ steps
+Drift increase: _____ steps
+
+Acceptable (< 100)? YES / NO
+
+If > 100 steps:
+Possible causes checked:
+[ ] DIP switches verified (both drivers 8x)
+[ ] Mechanical binding checked
+[ ] Driver currents verified
+[ ] Power supply voltage checked
+
+Result: PASS / FAIL
+
+
+TEST 20: Sync Drift After Mixed Movements
+-------------------------------------------
+Click "Sync Motors" to reset
+
+Perform:
+- 10 sec forward at 50%
+- 5 sec spin left at 30%
+- 10 sec backward at 50%
+- 5 sec spin right at 30%
+- 10 sec forward at 75%
+
+Final sync drift: _____ steps
+Acceptable (< 200)? YES / NO
+
+Result: PASS / FAIL
+
+
+================================================================
+ENDURANCE & STABILITY TESTS
+================================================================
+
+TEST 21: Extended Operation (5 Minutes)
+-----------------------------------------
+Throttle: 50%
+Pattern: Forward 20 sec → Turn left 5 sec → Forward 20 sec → Turn right 5 sec
+Repeat for 5 minutes
+
+WebSocket stayed connected? YES / NO
+Reconnections needed: _____ (count)
+
+Motors consistent? YES / NO
+Speed variations? YES / NO
+Unexpected stops? YES / NO (count: _____)
+
+Final sync drift: _____ steps
+
+Motor temperatures:
+Motor 1: Cool / Warm / Hot / Too hot
+Motor 2: Cool / Warm / Hot / Too hot
+
+Result: PASS / FAIL
+
+
+TEST 22: Network Stability
+----------------------------
+Run forward at 50% for 2 minutes
+
+Monitor log panel for:
+WebSocket disconnections: _____ (count)
+Command failures: _____ (count)
+Auto-reconnects: _____ (count)
+
+Connection stable? YES / NO
+
+Result: PASS / FAIL
+
+
+================================================================
+USER INTERFACE TESTS
+================================================================
+
+TEST 23: Visual Feedback
+--------------------------
+All status values update in real-time? YES / NO
+Axis bars move smoothly? YES / NO
+Direction changes reflected immediately? YES / NO
+Speed display accurate? YES / NO
+Log panel scrolls automatically? YES / NO
+Timestamps correct? YES / NO
+
+Result: PASS / FAIL
+
+
+TEST 24: Log Panel Functionality
+----------------------------------
+Log shows connection events? YES / NO
+Log shows commands sent? YES / NO
+Log shows responses received? YES / NO
+Log shows errors (if any)? YES / NO
+Log readable and clear? YES / NO
+
+Sample log entries:
+_______________________________________________________
+_______________________________________________________
+_______________________________________________________
+
+Result: PASS / FAIL
+
+
+================================================================
+ERROR HANDLING TESTS
+================================================================
+
+TEST 25: WebSocket Disconnect Recovery
+----------------------------------------
+1. Start motors at 50%
+2. Stop WebSocket server on RPi
+3. Observe web interface
+
+Status turns red? YES / NO
+Motors stopped automatically? YES / NO
+Error message shown? YES / NO
+
+4. Restart WebSocket server
+
+Auto-reconnects? YES / NO
+Reconnection time: _____ seconds
+Need to refresh page? YES / NO
+
+Result: PASS / FAIL
+
+
+TEST 26: RPi Connection Loss
+------------------------------
+1. Start motors at 50%
+2. Disconnect RPi from network
+
+Motors stopped? YES / NO
+Interface shows error? YES / NO
+Commands rejected? YES / NO
+
+Result: PASS / FAIL
+
+
+TEST 27: Joystick Disconnect During Operation
+-----------------------------------------------
+1. Start motors at 50%
+2. Unplug joystick USB
+
+Motors stopped? YES / NO
+Status shows "Not Connected"? YES / NO
+Log shows disconnection? YES / NO
+
+3. Plug joystick back in
+
+Auto-detects? YES / NO
+Resume control? YES / NO
+
+Result: PASS / FAIL
+
+
+================================================================
+PERFORMANCE BENCHMARKS
+================================================================
+
+Maximum Smooth Speed Achieved: _____________ steps/sec
+Minimum Controllable Speed: _____________ steps/sec
+Average Command Latency: _____________ ms
+Sync Drift After 5 Min: _____________ steps
+WebSocket Uptime: _____________ minutes
+
+Throttle Linearity (0-100%):
+0%   → _____ steps/sec
+25%  → _____ steps/sec (expected: 5000)
+50%  → _____ steps/sec (expected: 10000)
+75%  → _____ steps/sec (expected: 15000)
+100% → _____ steps/sec (expected: 20000)
+
+Turning Performance:
+Gradual turns smooth? YES / NO
+Point turns precise? YES / NO
+Differential steering accurate? YES / NO
+
+
+================================================================
+OVERALL SYSTEM RATING
+================================================================
+
+Responsiveness: 1 2 3 4 5 6 7 8 9 10
+Smoothness:     1 2 3 4 5 6 7 8 9 10
+Accuracy:       1 2 3 4 5 6 7 8 9 10
+Reliability:    1 2 3 4 5 6 7 8 9 10
+User Interface: 1 2 3 4 5 6 7 8 9 10
+
+Overall Score: _____ / 50
+
+
+================================================================
+ISSUES LOG
+================================================================
+
+Issue #1: __________________________________________________
+Severity: Critical / High / Medium / Low
+Status: Open / Resolved / Workaround
+Notes: _____________________________________________________
+___________________________________________________________
+
+Issue #2: __________________________________________________
+Severity: Critical / High / Medium / Low
+Status: Open / Resolved / Workaround
+Notes: _____________________________________________________
+___________________________________________________________
+
+Issue #3: __________________________________________________
+Severity: Critical / High / Medium / Low
+Status: Open / Resolved / Workaround
+Notes: _____________________________________________________
+___________________________________________________________
+
+
+================================================================
+FINAL VERDICT
+================================================================
+
+Total Tests: 27
+Tests Passed: _____
+Tests Failed: _____
+Tests Skipped: _____
+
+System Ready for Operation: YES / NO / WITH RESERVATIONS
+
+Tester Signature: _______________________
+Date: _______________________
+
+
+================================================================
+RECOMMENDATIONS
+================================================================
+
+Configuration Adjustments Needed:
+_______________________________________________________
+_______________________________________________________
+
+Hardware Improvements Suggested:
+_______________________________________________________
+_______________________________________________________
+
+Software Tuning Required:
+_______________________________________________________
+_______________________________________________________
+
+Next Steps:
+_______________________________________________________
+_______________________________________________________
+
+
+================================================================
+END OF TEST RESULTS
+================================================================

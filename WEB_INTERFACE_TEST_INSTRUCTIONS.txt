@@ -1,0 +1,815 @@
+================================================================
+WEB JOYSTICK INTERFACE - COMPLETE TEST INSTRUCTIONS
+================================================================
+
+SYSTEM OVERVIEW
+================================================================
+Topside Computer (Browser + Joystick)
+    ↓ WiFi (192.168.1.x network)
+Raspberry Pi 4 (IP: 192.168.1.43)
+    ↓ USB Serial
+Teensy 4.1 (Motor Controller)
+    ↓ Step/Dir signals
+Stepper Motors (Wantai 85BYGH450C-060)
+
+
+PREREQUISITES
+================================================================
+Hardware Required:
+- Raspberry Pi 4 (IP: 192.168.1.43) on WiFi network
+- Teensy 4.1 connected to RPi via USB
+- 2x Wantai stepper motors
+- 2x DQ860HA-V3.3 drivers (8x microstepping)
+- 48V power supply for motors
+- Topside computer on same WiFi (192.168.1.x)
+- Logitech Pro 3DS joystick with USB cable
+
+Software Required:
+- WebSocket server running on RPi (websocket_server.py)
+- Chrome or Edge browser (recommended for gamepad support)
+- joystick_control.html accessible at http://192.168.1.43/
+
+Before Starting:
+1. Verify both motor drivers set to 8x microstepping
+   DIP switches: SW5:ON, SW6:ON, SW7:ON, SW8:OFF
+2. Verify motor power supply is ON (48V)
+3. Verify RPi is connected to WiFi (ping 192.168.1.43)
+4. Verify Teensy shows up on RPi: ls -l /dev/ttyACM0
+
+
+================================================================
+SETUP PROCEDURE
+================================================================
+
+STEP 1: Start WebSocket Server on Raspberry Pi
+------------------------------------------------
+1. SSH into Raspberry Pi:
+   ssh pi@192.168.1.43
+
+2. Navigate to control folder:
+   cd raspberry_pi_control
+
+3. Start WebSocket server:
+   python3 websocket_server.py
+
+4. Verify startup messages:
+   ✓ "Connected to Teensy at /dev/ttyACM0"
+   ✓ "WebSocket server starting on 0.0.0.0:8765"
+   ✓ "WebSocket server running"
+
+5. Leave this terminal window open (do not close!)
+
+
+STEP 2: Open Web Interface on Topside Computer
+------------------------------------------------
+1. Open Chrome or Edge browser
+
+2. Navigate to:
+   http://192.168.1.43/joystick_control.html
+
+3. Wait for page to load completely
+
+4. Check connection status indicator (top left):
+   🟢 Green = Connected to RPi
+   🔴 Red = Connection failed
+
+   If RED:
+   - Check RPi IP is correct (192.168.1.43)
+   - Verify WebSocket server is running
+   - Check firewall on RPi: sudo ufw allow 8765
+   - Try refreshing page (Ctrl+R)
+
+
+STEP 3: Connect Logitech Pro 3DS Joystick
+------------------------------------------
+1. Plug joystick into topside computer via USB
+
+2. Move any joystick axis slightly
+
+3. Check "Joystick" status box:
+   Should change from "Not Connected" to "Connected"
+
+4. Verify axis displays update:
+   - Move X-axis → X-Axis bar should move
+   - Move Y-axis → Y-Axis bar should move
+   - Move throttle → Throttle bar should move
+
+   If joystick not detected:
+   - Unplug and replug USB
+   - Move axes to wake up
+   - Try different USB port
+   - Check browser console (F12) for errors
+
+
+================================================================
+TEST SERIES 1: CONNECTION VERIFICATION (5 min)
+================================================================
+
+TEST 1.1: WebSocket Connection
+--------------------------------
+Status indicator should be 🟢 GREEN
+
+In log panel, you should see:
+"Connected to Raspberry Pi motor controller"
+
+If connection successful:
+✓ Record: Connection established
+✓ Note the connection time
+
+If connection failed:
+✗ Check WebSocket server is running
+✗ Verify network connectivity
+✗ See troubleshooting section
+
+
+TEST 1.2: Manual Control Buttons
+----------------------------------
+Click "Get Status" button
+
+Expected result:
+- Log panel shows: "Sent: STATUS"
+- Response appears within 1 second
+- Status values populate (speed, direction, etc.)
+
+RECORD: Manual controls working? YES / NO
+
+
+TEST 1.3: Joystick Axis Test
+------------------------------
+Move each axis and verify display updates:
+
+X-Axis (Left/Right):
+Move LEFT  → Value should be negative (-1.0 to 0)
+Move RIGHT → Value should be positive (0 to +1.0)
+
+Y-Axis (Forward/Backward):
+Move FORWARD  → Value should be negative (-1.0 to 0)
+Move BACKWARD → Value should be positive (0 to +1.0)
+
+Throttle:
+Move MIN → 0%
+Move MAX → 100%
+
+RECORD: All axes responding? YES / NO
+
+
+================================================================
+TEST SERIES 2: BASIC MOVEMENT (10 min)
+================================================================
+
+TEST 2.1: Low Speed Forward
+-----------------------------
+1. Set throttle to 25% (¼ travel)
+2. Push Y-axis FORWARD gently
+3. Observe motors
+
+EXPECTED:
+- "Direction" shows: FORWARD
+- "Speed" shows: ~5000 steps/sec
+- Both motors run forward
+- Smooth operation, no pulsing
+
+LISTEN FOR:
+- Smooth humming sound
+- No clicking or grinding
+- Both motors same volume
+
+4. Return joystick to center
+5. Motors should stop smoothly
+
+RECORD:
+Forward movement smooth? YES / NO
+Speed displayed correctly? YES / NO
+Result: PASS / FAIL
+
+
+TEST 2.2: Low Speed Backward
+------------------------------
+1. Keep throttle at 25%
+2. Pull Y-axis BACKWARD gently
+3. Observe motors
+
+EXPECTED:
+- "Direction" shows: BACKWARD
+- "Speed" shows: ~5000 steps/sec
+- Both motors run backward
+- Smooth deceleration to stop, then acceleration backward
+
+4. Return joystick to center
+5. Motors should stop smoothly
+
+RECORD:
+Backward movement smooth? YES / NO
+Direction change handled correctly? YES / NO
+Result: PASS / FAIL
+
+
+TEST 2.3: Variable Speed Control
+----------------------------------
+1. Push Y-axis forward
+
+2. Slowly increase throttle:
+   10% → Speed should be ~2000 steps/sec
+   25% → Speed should be ~5000 steps/sec
+   50% → Speed should be ~10000 steps/sec
+   75% → Speed should be ~15000 steps/sec
+
+3. Speed bar should fill proportionally
+
+4. Motors should smoothly increase speed
+
+5. Reduce throttle back to 0%
+
+RECORD:
+Speed changes smooth? YES / NO
+Throttle control linear? YES / NO
+Speed display accurate? YES / NO
+Result: PASS / FAIL
+
+
+TEST 2.4: Maximum Speed Test
+------------------------------
+⚠️  CAUTION: High speed test!
+
+1. Push Y-axis forward
+2. Increase throttle to 100%
+3. Speed should reach ~20000 steps/sec
+4. Run for 5 seconds
+5. Reduce throttle to 0%
+
+OBSERVE:
+- Any pulsing at high speed? YES / NO
+- Motors stay synchronized? YES / NO
+- Smooth operation? YES / NO
+
+RECORD:
+Max speed achieved: _____ steps/sec
+Smooth at max speed? YES / NO
+Result: PASS / FAIL
+
+
+================================================================
+TEST SERIES 3: STEERING & TURNING (15 min)
+================================================================
+
+TEST 3.1: Gradual Turn While Moving Forward
+---------------------------------------------
+1. Set throttle to 50%
+2. Push Y-axis forward (moving forward)
+3. Gently tilt X-axis LEFT (about 30%)
+
+EXPECTED:
+- "Direction" shows: DIFF FORWARD
+- Left motor slows down slightly
+- Right motor speeds up slightly
+- Vehicle turns in smooth arc to the left
+
+4. Return X-axis to center → straight line
+
+5. Tilt X-axis RIGHT (about 30%)
+
+EXPECTED:
+- Right motor slows down
+- Left motor speeds up
+- Vehicle turns right
+
+6. Return joystick to center
+
+RECORD:
+Differential steering works? YES / NO
+Turns smooth and predictable? YES / NO
+Both directions equal? YES / NO
+Result: PASS / FAIL
+
+
+TEST 3.2: Sharp Turns
+----------------------
+1. Set throttle to 50%
+2. Push Y-axis forward
+3. Push X-axis HARD LEFT (> 50%)
+
+EXPECTED:
+- Sharper turn than gradual
+- Larger speed difference between motors
+- Tighter turn radius
+
+4. Center X-axis → return to straight
+
+5. Push X-axis HARD RIGHT (> 50%)
+
+EXPECTED:
+- Sharp turn to right
+- Smooth control
+
+RECORD:
+Sharp turns controllable? YES / NO
+Speed difference noticeable? YES / NO
+Result: PASS / FAIL
+
+
+TEST 3.3: Point Turn Left (Spin in Place)
+-------------------------------------------
+1. Set throttle to 30%
+2. Return Y-axis to CENTER
+3. Push X-axis HARD LEFT (> 70%)
+
+EXPECTED:
+- "Direction" shows: SPIN LEFT
+- Motor 1 runs BACKWARD
+- Motor 2 runs FORWARD
+- Vehicle spins counterclockwise in place
+- No forward/backward movement
+
+4. Return X-axis to center → stop spinning
+
+RECORD:
+Spins in place? YES / NO
+No forward/backward drift? YES / NO
+Smooth rotation? YES / NO
+Result: PASS / FAIL
+
+
+TEST 3.4: Point Turn Right (Spin in Place)
+--------------------------------------------
+1. Keep throttle at 30%
+2. Y-axis at CENTER
+3. Push X-axis HARD RIGHT (> 70%)
+
+EXPECTED:
+- "Direction" shows: SPIN RIGHT
+- Motor 1 runs FORWARD
+- Motor 2 runs BACKWARD
+- Vehicle spins clockwise in place
+
+4. Return to center
+
+RECORD:
+Spins opposite direction? YES / NO
+Symmetric to left spin? YES / NO
+Result: PASS / FAIL
+
+
+TEST 3.5: Complex Maneuver Test
+---------------------------------
+Perform this sequence:
+1. Throttle 50%
+2. Forward 3 seconds
+3. Turn left while moving (3 sec)
+4. Straight forward (2 sec)
+5. Turn right while moving (3 sec)
+6. Stop
+7. Spin left in place (2 sec)
+8. Stop
+9. Backward 3 seconds
+10. Stop
+
+RECORD:
+All movements executed? YES / NO
+Transitions smooth? YES / NO
+No unexpected behavior? YES / NO
+Result: PASS / FAIL
+
+
+================================================================
+TEST SERIES 4: RESPONSE TIME & LATENCY (10 min)
+================================================================
+
+TEST 4.1: Start/Stop Response Time
+------------------------------------
+1. Throttle to 50%
+2. Note current time
+
+3. Push forward QUICKLY
+4. Note time when motors actually start
+   Latency: _____ milliseconds
+   Expected: < 200ms
+
+5. Center joystick QUICKLY
+6. Note time when motors stop
+   Stop latency: _____ milliseconds
+   Expected: < 200ms
+
+RECORD:
+Start latency acceptable? YES / NO
+Stop latency acceptable? YES / NO
+Result: PASS / FAIL
+
+
+TEST 4.2: Direction Change Response
+-------------------------------------
+1. Throttle 50%, move forward at 5000 steps/sec
+2. Quickly pull backward
+
+Observe:
+- Motors slow down first (auto-slowdown)
+- Then reverse direction
+- Then accelerate backward
+
+Total transition time: _____ seconds
+Expected: ~1-2 seconds (includes slowdown)
+
+RECORD:
+Direction change safe? YES / NO
+Auto-slowdown working? YES / NO
+Result: PASS / FAIL
+
+
+TEST 4.3: Rapid Command Sequence
+----------------------------------
+Throttle at 50%, perform quickly:
+Forward → Stop → Left spin → Stop → Backward → Stop → Right spin → Stop
+
+All commands executed? YES / NO
+Any commands missed? YES / NO
+System kept up? YES / NO
+Log shows all commands? YES / NO
+
+RECORD:
+System responsive to rapid changes? YES / NO
+Result: PASS / FAIL
+
+
+================================================================
+TEST SERIES 5: EMERGENCY & SAFETY (10 min)
+================================================================
+
+TEST 5.1: Emergency Stop Button
+---------------------------------
+1. Throttle 75%, move forward at high speed
+2. Click red "E-Stop" button
+
+EXPECTED:
+- Motors decelerate smoothly over ~0.5 seconds
+- Not instant stop (mechanical protection)
+- "Direction" changes to STOPPED
+- Speed drops to 0
+
+Deceleration smooth? YES / NO
+No harsh jerking? YES / NO
+
+RECORD:
+E-Stop works correctly? YES / NO
+Result: PASS / FAIL
+
+
+TEST 5.2: Throttle Safety (Zero Speed Check)
+----------------------------------------------
+1. Set throttle to 0%
+2. Push forward hard on Y-axis
+
+EXPECTED:
+- Motors should NOT move
+- Speed stays at 0
+- System ignores movement commands at zero throttle
+
+Motors stayed stopped? YES / NO
+
+3. Gradually increase throttle
+4. Motors should start when throttle > ~5%
+
+RECORD:
+Zero throttle prevents movement? YES / NO
+Result: PASS / FAIL
+
+
+TEST 5.3: Network Disconnect Safety
+-------------------------------------
+1. Start moving forward at 50%
+2. Stop WebSocket server on RPi:
+   (In RPi terminal: Ctrl+C)
+
+EXPECTED:
+- WebSocket status turns 🔴 RED
+- Motors stop automatically
+- Error message in log
+- Commands rejected
+
+3. Restart WebSocket server:
+   python3 websocket_server.py
+
+4. Web interface should auto-reconnect within 3 seconds
+
+RECORD:
+Motors stopped on disconnect? YES / NO
+Auto-reconnect worked? YES / NO
+Result: PASS / FAIL
+
+
+TEST 5.4: Joystick Disconnect Safety
+--------------------------------------
+1. Move forward at 50%
+2. Unplug joystick USB cable
+
+EXPECTED:
+- "Joystick" status shows "Not Connected"
+- Motors continue at last commanded speed (this is OK)
+- Can use manual buttons to stop
+
+3. Click "Stop" button
+4. Plug joystick back in
+5. Move any axis to reactivate
+
+RECORD:
+Disconnect detected? YES / NO
+Manual controls still work? YES / NO
+Reconnection successful? YES / NO
+Result: PASS / FAIL
+
+
+================================================================
+TEST SERIES 6: SYNCHRONIZATION (10 min)
+================================================================
+
+TEST 6.1: Sync Drift Monitoring - Short Run
+---------------------------------------------
+1. Click "Sync Motors" button
+2. Wait for confirmation
+3. Click "Get Status" → Record sync drift: _____ steps
+
+4. Throttle 50%, move forward for 30 seconds
+
+5. Click "Get Status" again
+6. Record sync drift: _____ steps
+
+Drift increase: _____ steps
+Acceptable (< 100)? YES / NO
+
+RECORD:
+Sync maintained? YES / NO
+Result: PASS / FAIL
+
+
+TEST 6.2: Sync Drift - Mixed Movements
+----------------------------------------
+1. Click "Sync Motors" to reset
+
+2. Perform:
+   - 10 sec forward at 50%
+   - 5 sec spin left at 30%
+   - 10 sec backward at 50%
+   - 5 sec spin right at 30%
+   - 10 sec forward at 75%
+
+3. Click "Get Status"
+4. Record sync drift: _____ steps
+
+Acceptable (< 200)? YES / NO
+
+If drift > 1000:
+⚠️  STOP! Check DIP switches on both drivers!
+Both must be: SW5:ON, SW6:ON, SW7:ON, SW8:OFF
+
+RECORD:
+Sync acceptable after mixed movements? YES / NO
+Result: PASS / FAIL
+
+
+TEST 6.3: Manual Sync Reset
+-----------------------------
+1. After running motors, click "Get Status"
+2. Note sync drift: _____ steps
+
+3. Click "Sync Motors" button
+
+4. Click "Get Status" again
+5. Sync drift should be: 0 steps
+
+Drift reset to zero? YES / NO
+
+RECORD:
+Manual sync works? YES / NO
+Result: PASS / FAIL
+
+
+================================================================
+TEST SERIES 7: ENDURANCE (15 min)
+================================================================
+
+TEST 7.1: 5-Minute Continuous Operation
+-----------------------------------------
+Pattern: Forward 20s → Turn left 5s → Forward 20s → Turn right 5s
+Repeat pattern for 5 minutes
+
+Throttle: 50%
+
+Monitor during test:
+- WebSocket connection status
+- Sync drift (check every minute)
+- Motor sound consistency
+- Temperature
+
+Minute 1 drift: _____ steps
+Minute 2 drift: _____ steps
+Minute 3 drift: _____ steps
+Minute 4 drift: _____ steps
+Minute 5 drift: _____ steps
+
+WebSocket disconnections: _____ times
+Command failures: _____ times
+
+After 5 minutes:
+Touch motors carefully:
+Motor 1 temp: Cool / Warm / Hot / Too hot to touch
+Motor 2 temp: Cool / Warm / Hot / Too hot to touch
+
+RECORD:
+System stable for 5 minutes? YES / NO
+Motors acceptable temperature? YES / NO
+Result: PASS / FAIL
+
+
+TEST 7.2: High-Speed Endurance
+--------------------------------
+⚠️  CAUTION: High speed for 2 minutes!
+
+1. Throttle 75% (15000 steps/sec)
+2. Move forward
+3. Run for 2 full minutes
+
+Monitor:
+- Any pulsing sounds? YES / NO
+- Speed consistent? YES / NO
+- Overheating? YES / NO
+
+After 2 minutes:
+Sync drift: _____ steps
+
+Stop and wait 1 minute for cooling
+
+RECORD:
+High speed stable? YES / NO
+No thermal issues? YES / NO
+Result: PASS / FAIL
+
+
+================================================================
+TEST SERIES 8: USER INTERFACE (5 min)
+================================================================
+
+TEST 8.1: Visual Feedback
+--------------------------
+Check all displays update in real-time:
+
+Status Panel:
+[ ] Speed value updates
+[ ] Direction updates
+[ ] Joystick status accurate
+[ ] Sync drift displays
+
+Joystick Display:
+[ ] X-Axis bar moves smoothly
+[ ] Y-Axis bar moves smoothly
+[ ] Throttle bar moves smoothly
+[ ] Calculated speed updates
+
+RECORD:
+All displays functional? YES / NO
+Result: PASS / FAIL
+
+
+TEST 8.2: Log Panel
+--------------------
+Check log shows:
+[ ] Connection events
+[ ] Commands sent (with timestamps)
+[ ] Responses received
+[ ] Errors (if any occur)
+
+Test scrolling:
+Generate 20+ log entries → Log auto-scrolls? YES / NO
+
+Timestamps accurate? YES / NO
+
+RECORD:
+Log panel useful? YES / NO
+Result: PASS / FAIL
+
+
+================================================================
+PERFORMANCE BENCHMARKS
+================================================================
+
+After completing all tests, record:
+
+Maximum Speed Achieved: _____________ steps/sec
+Minimum Controllable Speed: _____________ steps/sec
+Average Command Latency: _____________ ms
+Typical Sync Drift: _____________ steps
+Max Sync Drift Observed: _____________ steps
+
+Throttle Calibration Check:
+0%   → _____ steps/sec (expect 0)
+25%  → _____ steps/sec (expect 5000)
+50%  → _____ steps/sec (expect 10000)
+75%  → _____ steps/sec (expect 15000)
+100% → _____ steps/sec (expect 20000)
+
+Turning Performance:
+Minimum turn radius (estimate): _____________ cm
+Point turn time (360°): _____________ seconds
+Steering responsiveness: Excellent / Good / Fair / Poor
+
+
+================================================================
+TROUBLESHOOTING COMMON ISSUES
+================================================================
+
+ISSUE: WebSocket Won't Connect (Red Status)
+SOLUTION:
+1. Check RPi is on network: ping 192.168.1.43
+2. Verify WebSocket server running on RPi
+3. Check firewall: sudo ufw allow 8765
+4. Try page refresh (Ctrl+R or F5)
+5. Check browser console (F12) for errors
+
+
+ISSUE: Joystick Not Detected
+SOLUTION:
+1. Unplug and replug USB
+2. Move any axis to wake up gamepad
+3. Try different USB port
+4. Use Chrome or Edge browser
+5. Check browser console: navigator.getGamepads()
+
+
+ISSUE: Motors Don't Respond to Joystick
+SOLUTION:
+1. Check throttle is above 0%
+2. Verify WebSocket connected (green status)
+3. Check "Get Status" button works
+4. Verify Teensy connected: ls -l /dev/ttyACM0
+5. Check motor power supply is ON
+
+
+ISSUE: One Motor Delayed or Not Synced
+SOLUTION:
+1. Check both drivers have identical DIP settings
+2. Both must be: SW5:ON, SW6:ON, SW7:ON, SW8:OFF
+3. Run: python3 diagnose_sync.py
+4. Check mechanical binding on wheels
+5. Verify driver current settings match
+
+
+ISSUE: Jerky or Erratic Movement
+SOLUTION:
+1. Increase DEADZONE in HTML (line 304):
+   const DEADZONE = 0.2;
+2. Reduce UPDATE_RATE:
+   const UPDATE_RATE = 100;
+3. Check joystick for physical damage
+4. Test with different joystick
+
+
+ISSUE: High Latency (Slow Response)
+SOLUTION:
+1. Check WiFi signal strength
+2. Reduce UPDATE_RATE if too low
+3. Check RPi CPU load: top
+4. Check network traffic
+5. Move closer to WiFi access point
+
+
+================================================================
+FINAL CHECKLIST
+================================================================
+
+Before declaring system ready:
+
+Hardware:
+[ ] Both motors run smoothly
+[ ] No overheating issues
+[ ] Sync drift < 500 steps
+[ ] All connections secure
+
+Software:
+[ ] WebSocket server auto-starts (optional)
+[ ] Web interface loads correctly
+[ ] All buttons functional
+[ ] Log panel working
+
+Performance:
+[ ] Latency < 200ms
+[ ] Speed control linear
+[ ] Turns smooth and predictable
+[ ] E-stop works correctly
+
+Safety:
+[ ] Zero throttle prevents movement
+[ ] Disconnect stops motors
+[ ] Emergency stop functional
+[ ] No unexpected behaviors
+
+User Experience:
+[ ] Interface intuitive
+[ ] Visual feedback clear
+[ ] Joystick responsive
+[ ] System reliable
+
+
+================================================================
+RECORD ALL RESULTS IN: WEB_INTERFACE_TEST_RESULTS.txt
+================================================================
+
+Transfer results to the test results file for documentation.
+
+Good luck with testing! 🎮

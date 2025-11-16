@@ -10,7 +10,7 @@ Firmware Version: Single Teensy 4.1 with Phase 1 & 2 Features
 PERFORMANCE BENCHMARKS
 ================================================================
 
-Max Smooth Speed Achieved: _____________ steps/sec
+Max Smooth Speed Achieved: 20000 steps/sec
   (Target: 20000 steps/sec, Previous limit: 2000 steps/sec)
 
 Typical Sync Drift (30 sec run): _____________ steps
