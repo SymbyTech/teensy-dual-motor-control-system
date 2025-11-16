@@ -55,7 +55,7 @@ class JoystickServer:
         self.running = True
         return True
     
-    async def handle_client(self, websocket, path):
+    async def handle_client(self, websocket):
         """Handle a new WebSocket client connection"""
         client_id = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
         logger.info(f"New client connected: {client_id}")
@@ -83,12 +83,17 @@ class JoystickServer:
         
         except websockets.exceptions.ConnectionClosed:
             logger.info(f"Client disconnected: {client_id}")
+        except Exception as e:
+            logger.error(f"Unexpected error in client handler: {e}")
         
         finally:
             connected_clients.discard(websocket)
-            # Stop motors when client disconnects
-            self.controller.stop_all()
-            logger.info(f"Motors stopped - client {client_id} disconnected")
+            # Stop motors when client disconnects (non-blocking)
+            try:
+                await asyncio.to_thread(self.controller.stop_all)
+                logger.info(f"Motors stopped - client {client_id} disconnected")
+            except Exception as e:
+                logger.error(f"Error stopping motors on disconnect: {e}")
     
     async def process_message(self, websocket, message: str):
         """Process incoming WebSocket message"""
@@ -100,7 +105,7 @@ class JoystickServer:
                 # Direct serial command
                 command = data.get('command')
                 logger.info(f"Direct command: {command}")
-                response = self.controller.send_command(command)
+                response = await asyncio.to_thread(self.controller.send_command, command)
                 
                 await websocket.send(json.dumps({
                     'type': 'response',
@@ -126,14 +131,14 @@ class JoystickServer:
         try:
             if cmd_type == 'forward':
                 speed = command.get('speed', 2000)
-                self.controller.move_forward(speed)
+                await asyncio.to_thread(self.controller.move_forward, speed)
                 current_state['speed'] = speed
                 current_state['direction'] = 'FORWARD'
                 logger.debug(f"Forward at {speed} steps/sec")
             
             elif cmd_type == 'backward':
                 speed = command.get('speed', 2000)
-                self.controller.move_backward(speed)
+                await asyncio.to_thread(self.controller.move_backward, speed)
                 current_state['speed'] = speed
                 current_state['direction'] = 'BACKWARD'
                 logger.debug(f"Backward at {speed} steps/sec")
@@ -143,10 +148,10 @@ class JoystickServer:
                 speed = command.get('speed', 2000)
                 
                 if direction == 'left':
-                    self.controller.spin_left(speed)
+                    await asyncio.to_thread(self.controller.spin_left, speed)
                     current_state['direction'] = 'SPIN LEFT'
                 elif direction == 'right':
-                    self.controller.spin_right(speed)
+                    await asyncio.to_thread(self.controller.spin_right, speed)
                     current_state['direction'] = 'SPIN RIGHT'
                 
                 current_state['speed'] = speed
@@ -158,25 +163,25 @@ class JoystickServer:
                 left_speed = command.get('leftSpeed', 2000)
                 right_speed = command.get('rightSpeed', 2000)
                 
-                # Set individual motor speeds
-                self.controller.set_motor_speed(1, int(left_speed))
-                self.controller.set_motor_speed(2, int(right_speed))
+                # Set individual motor speeds (run in thread to avoid blocking)
+                await asyncio.to_thread(self.controller.set_motor_speed, 1, int(left_speed))
+                await asyncio.to_thread(self.controller.set_motor_speed, 2, int(right_speed))
                 
                 if direction == 'forward':
-                    self.controller.send_command("M1:FORWARD")
-                    self.controller.send_command("M2:FORWARD")
+                    await asyncio.to_thread(self.controller.send_command, "M1:FORWARD")
+                    await asyncio.to_thread(self.controller.send_command, "M2:FORWARD")
                 elif direction == 'backward':
-                    self.controller.send_command("M1:BACKWARD")
-                    self.controller.send_command("M2:BACKWARD")
+                    await asyncio.to_thread(self.controller.send_command, "M1:BACKWARD")
+                    await asyncio.to_thread(self.controller.send_command, "M2:BACKWARD")
                 
-                self.controller.send_command("RUN")
+                await asyncio.to_thread(self.controller.send_command, "RUN")
                 
                 current_state['speed'] = int((left_speed + right_speed) / 2)
                 current_state['direction'] = f"DIFF {direction.upper()}"
                 logger.debug(f"Differential {direction}: L={left_speed}, R={right_speed}")
             
             elif cmd_type == 'stop':
-                self.controller.stop_all()
+                await asyncio.to_thread(self.controller.stop_all)
                 current_state['speed'] = 0
                 current_state['direction'] = 'STOPPED'
                 logger.debug("Motors stopped")
@@ -218,8 +223,8 @@ class JoystickServer:
         """Periodically request status from Teensy and broadcast to clients"""
         while self.running:
             try:
-                # Request status from Teensy
-                status = self.controller.get_status()
+                # Request status from Teensy (non-blocking)
+                status = await asyncio.to_thread(self.controller.get_status)
                 
                 if status and 'Sync Drift:' in status:
                     # Parse sync drift from status
@@ -250,10 +255,16 @@ class JoystickServer:
         logger.info(f"WebSocket server starting on {WEBSOCKET_HOST}:{WEBSOCKET_PORT}")
         
         try:
-            async with websockets.serve(self.handle_client, WEBSOCKET_HOST, WEBSOCKET_PORT):
+            async with websockets.serve(
+                self.handle_client, 
+                WEBSOCKET_HOST, 
+                WEBSOCKET_PORT,
+                ping_interval=20,  # Send ping every 20 seconds
+                ping_timeout=10    # Wait 10 seconds for pong
+            ):
                 logger.info("✓ WebSocket server running")
                 logger.info("Open the HTML interface in your browser:")
-                logger.info("  http://raspberrypi.local/joystick_control.html")
+                logger.info("  http://192.168.1.43/joystick_control.html")
                 logger.info("\nPress Ctrl+C to stop")
                 
                 # Keep running
