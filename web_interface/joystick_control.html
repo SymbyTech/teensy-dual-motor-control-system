@@ -487,24 +487,57 @@
         function sendMotorCommand(command) {
             if (!ws || ws.readyState !== WebSocket.OPEN) return;
             
-            const message = JSON.stringify({
-                type: 'motor_control',
-                command: command
-            });
-            
-            ws.send(message);
-            
-            // Update UI
+            // Convert joystick command to Teensy serial commands
             if (command.type === 'forward') {
+                sendCommand(`SPEED:${Math.round(command.speed)}`);
+                sendCommand('FORWARD');
+                sendCommand('RUN');
+                
                 document.getElementById('direction').textContent = 'FORWARD';
-                document.getElementById('currentSpeed').textContent = command.speed;
+                document.getElementById('currentSpeed').textContent = Math.round(command.speed);
+                
             } else if (command.type === 'backward') {
+                sendCommand(`SPEED:${Math.round(command.speed)}`);
+                sendCommand('BACKWARD');
+                sendCommand('RUN');
+                
                 document.getElementById('direction').textContent = 'BACKWARD';
-                document.getElementById('currentSpeed').textContent = command.speed;
+                document.getElementById('currentSpeed').textContent = Math.round(command.speed);
+                
             } else if (command.type === 'spin') {
+                if (command.direction === 'left') {
+                    sendCommand(`SPIN:LEFT:${Math.round(command.speed)}`);
+                } else {
+                    sendCommand(`SPIN:RIGHT:${Math.round(command.speed)}`);
+                }
+                
                 document.getElementById('direction').textContent = 'SPIN ' + command.direction.toUpperCase();
-                document.getElementById('currentSpeed').textContent = command.speed;
+                document.getElementById('currentSpeed').textContent = Math.round(command.speed);
+                
+            } else if (command.type === 'differential') {
+                // Differential steering with individual motor speeds
+                const leftSpeed = Math.round(command.leftSpeed);
+                const rightSpeed = Math.round(command.rightSpeed);
+                
+                sendCommand(`M1:SPEED:${leftSpeed}`);
+                sendCommand(`M2:SPEED:${rightSpeed}`);
+                
+                if (command.direction === 'forward') {
+                    sendCommand('M1:FORWARD');
+                    sendCommand('M2:FORWARD');
+                } else {
+                    sendCommand('M1:BACKWARD');
+                    sendCommand('M2:BACKWARD');
+                }
+                
+                sendCommand('RUN');
+                
+                document.getElementById('direction').textContent = 'DIFF ' + command.direction.toUpperCase();
+                document.getElementById('currentSpeed').textContent = Math.round((leftSpeed + rightSpeed) / 2);
+                
             } else if (command.type === 'stop') {
+                sendCommand('STOP');
+                
                 document.getElementById('direction').textContent = 'STOPPED';
                 document.getElementById('currentSpeed').textContent = 0;
             }
