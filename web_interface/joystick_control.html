@@ -311,6 +311,8 @@
         let lastUpdate = 0;
         let lastCommand = null;
         let commandInProgress = false;  // Prevent command pileup
+        let currentMotorState = { type: 'stop', speed: 0 };  // Track actual motor state
+        let stopSent = false;  // Prevent stop spam
         
         // Initialize WebSocket connection
         function connectWebSocket() {
@@ -369,6 +371,12 @@
             
             ws.send(message);
             addLog('Sent: ' + command, 'info');
+            
+            // Update state for manual commands
+            if (command === 'STOP' || command === 'ESTOP') {
+                currentMotorState = { type: 'stop', speed: 0 };
+                stopSent = true;
+            }
         }
         
         // Joystick scanning
@@ -430,14 +438,13 @@
             
             // Compare commands by value, not reference
             const commandStr = JSON.stringify(command);
-            const lastCommandStr = lastCommand ? JSON.stringify(lastCommand) : null;
+            const currentStateStr = JSON.stringify(currentMotorState);
             
-            // Only send if command changed AND not currently sending
-            const now = Date.now();
-            if (!commandInProgress && (commandStr !== lastCommandStr || (now - lastUpdate) > UPDATE_RATE)) {
+            // Only send if state actually changed (not just time passed)
+            if (!commandInProgress && commandStr !== currentStateStr) {
                 sendMotorCommand(command);
                 lastCommand = command;
-                lastUpdate = now;
+                lastUpdate = Date.now();
             }
         }
         
@@ -497,17 +504,24 @@
             
             // Convert joystick command to Teensy serial commands
             if (command.type === 'forward') {
+                // Batch commands with small delays
                 sendCommand(`SPEED:${Math.round(command.speed)}`);
-                sendCommand('FORWARD');
-                sendCommand('RUN');
+                setTimeout(() => sendCommand('FORWARD'), 10);
+                setTimeout(() => sendCommand('RUN'), 20);
+                
+                currentMotorState = { type: 'forward', speed: command.speed };
+                stopSent = false;
                 
                 document.getElementById('direction').textContent = 'FORWARD';
                 document.getElementById('currentSpeed').textContent = Math.round(command.speed);
                 
             } else if (command.type === 'backward') {
                 sendCommand(`SPEED:${Math.round(command.speed)}`);
-                sendCommand('BACKWARD');
-                sendCommand('RUN');
+                setTimeout(() => sendCommand('BACKWARD'), 10);
+                setTimeout(() => sendCommand('RUN'), 20);
+                
+                currentMotorState = { type: 'backward', speed: command.speed };
+                stopSent = false;
                 
                 document.getElementById('direction').textContent = 'BACKWARD';
                 document.getElementById('currentSpeed').textContent = Math.round(command.speed);
@@ -519,6 +533,9 @@
                     sendCommand(`SPIN:RIGHT:${Math.round(command.speed)}`);
                 }
                 
+                currentMotorState = { type: 'spin', direction: command.direction, speed: command.speed };
+                stopSent = false;
+                
                 document.getElementById('direction').textContent = 'SPIN ' + command.direction.toUpperCase();
                 document.getElementById('currentSpeed').textContent = Math.round(command.speed);
                 
@@ -528,32 +545,40 @@
                 const rightSpeed = Math.round(command.rightSpeed);
                 
                 sendCommand(`M1:SPEED:${leftSpeed}`);
-                sendCommand(`M2:SPEED:${rightSpeed}`);
+                setTimeout(() => sendCommand(`M2:SPEED:${rightSpeed}`), 10);
                 
                 if (command.direction === 'forward') {
-                    sendCommand('M1:FORWARD');
-                    sendCommand('M2:FORWARD');
+                    setTimeout(() => sendCommand('M1:FORWARD'), 20);
+                    setTimeout(() => sendCommand('M2:FORWARD'), 30);
                 } else {
-                    sendCommand('M1:BACKWARD');
-                    sendCommand('M2:BACKWARD');
+                    setTimeout(() => sendCommand('M1:BACKWARD'), 20);
+                    setTimeout(() => sendCommand('M2:BACKWARD'), 30);
                 }
                 
-                sendCommand('RUN');
+                setTimeout(() => sendCommand('RUN'), 40);
+                
+                currentMotorState = { type: 'differential', direction: command.direction, leftSpeed, rightSpeed };
+                stopSent = false;
                 
                 document.getElementById('direction').textContent = 'DIFF ' + command.direction.toUpperCase();
                 document.getElementById('currentSpeed').textContent = Math.round((leftSpeed + rightSpeed) / 2);
                 
             } else if (command.type === 'stop') {
-                sendCommand('STOP');
-                
-                document.getElementById('direction').textContent = 'STOPPED';
-                document.getElementById('currentSpeed').textContent = 0;
+                // Only send STOP once when transitioning from moving to stopped
+                if (!stopSent) {
+                    sendCommand('STOP');
+                    stopSent = true;
+                    currentMotorState = { type: 'stop', speed: 0 };
+                    
+                    document.getElementById('direction').textContent = 'STOPPED';
+                    document.getElementById('currentSpeed').textContent = 0;
+                }
             }
             
-            // Release lock after a short delay to allow command to be sent
+            // Release lock after enough time for all commands to be sent
             setTimeout(() => {
                 commandInProgress = false;
-            }, 50);
+            }, 100);
         }
         
         // Update axis display
