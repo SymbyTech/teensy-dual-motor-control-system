@@ -303,13 +303,14 @@
         const WS_URL = 'ws://192.168.1.43:8765'; // Raspberry Pi WebSocket server
         const DEADZONE = 0.1;  // Ignore joystick inputs below this threshold
         const MAX_SPEED = 20000;  // Maximum motor speed
-        const UPDATE_RATE = 50;  // Update every 50ms (20Hz)
+        const UPDATE_RATE = 200;  // Update every 200ms (5Hz) - prevents command flooding
         
         // State
         let ws = null;
         let gamepad = null;
         let lastUpdate = 0;
         let lastCommand = null;
+        let commandInProgress = false;  // Prevent command pileup
         
         // Initialize WebSocket connection
         function connectWebSocket() {
@@ -427,9 +428,13 @@
             // Determine command based on joystick position
             const command = calculateMotorCommand(x, y, speed);
             
-            // Only send if command changed or enough time passed
+            // Compare commands by value, not reference
+            const commandStr = JSON.stringify(command);
+            const lastCommandStr = lastCommand ? JSON.stringify(lastCommand) : null;
+            
+            // Only send if command changed AND not currently sending
             const now = Date.now();
-            if (command !== lastCommand || (now - lastUpdate) > UPDATE_RATE) {
+            if (!commandInProgress && (commandStr !== lastCommandStr || (now - lastUpdate) > UPDATE_RATE)) {
                 sendMotorCommand(command);
                 lastCommand = command;
                 lastUpdate = now;
@@ -486,6 +491,9 @@
         // Send motor command to RPi
         function sendMotorCommand(command) {
             if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            if (commandInProgress) return;  // Prevent command pileup
+            
+            commandInProgress = true;
             
             // Convert joystick command to Teensy serial commands
             if (command.type === 'forward') {
@@ -541,6 +549,11 @@
                 document.getElementById('direction').textContent = 'STOPPED';
                 document.getElementById('currentSpeed').textContent = 0;
             }
+            
+            // Release lock after a short delay to allow command to be sent
+            setTimeout(() => {
+                commandInProgress = false;
+            }, 50);
         }
         
         // Update axis display
