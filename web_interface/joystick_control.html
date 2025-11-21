@@ -303,16 +303,14 @@
         const WS_URL = 'ws://192.168.1.43:8765'; // Raspberry Pi WebSocket server
         const DEADZONE = 0.1;  // Ignore joystick inputs below this threshold
         const MAX_SPEED = 20000;  // Maximum motor speed
-        const UPDATE_RATE = 200;  // Update every 200ms (5Hz) - prevents command flooding
+        const COMMAND_THROTTLE_MS = 50;  // Minimum time between commands (20Hz max)
         
         // State
         let ws = null;
         let gamepad = null;
-        let lastUpdate = 0;
-        let lastCommand = null;
-        let commandInProgress = false;  // Prevent command pileup
+        let lastCommandTime = 0;
         let currentMotorState = { type: 'stop', speed: 0 };  // Track actual motor state
-        let stopSent = false;  // Prevent stop spam
+        let animationFrameId = null;
         
         // Initialize WebSocket connection
         function connectWebSocket() {
@@ -375,7 +373,6 @@
             // Update state for manual commands
             if (command === 'STOP' || command === 'ESTOP') {
                 currentMotorState = { type: 'stop', speed: 0 };
-                stopSent = true;
             }
         }
         
@@ -387,65 +384,92 @@
                 if (gamepads[i] && gamepads[i].id.toLowerCase().includes('logitech')) {
                     if (!gamepad) {
                         gamepad = gamepads[i];
-                        addLog('Joystick connected: ' + gamepad.id, 'success');
-                        document.getElementById('joystickStatus').textContent = 'Connected';
+                        document.getElementById('joystickStatus').textContent = 'Connected: ' + gamepads[i].id;
+                        document.getElementById('joystickStatus').style.color = '#4CAF50';
+                        addLog('Logitech joystick connected: ' + gamepads[i].id, 'success');
+                        // Start animation frame loop
+                        if (!animationFrameId) {
+                            updateJoystickLoop();
+                        }
                     }
-                    return gamepads[i];
+                    return;
                 }
             }
             
+            // No Logitech gamepad found
             if (gamepad) {
-                addLog('Joystick disconnected', 'warning');
-                document.getElementById('joystickStatus').textContent = 'Not Connected';
                 gamepad = null;
+                document.getElementById('joystickStatus').textContent = 'Not Connected';
+                document.getElementById('joystickStatus').style.color = '#f44336';
+                addLog('Logitech joystick disconnected', 'warning');
+                // Stop animation frame loop
+                if (animationFrameId) {
+                    cancelAnimationFrame(animationFrameId);
+                    animationFrameId = null;
+                }
             }
-            
-            return null;
         }
         
-        // Process joystick input
-        function processJoystick() {
-            const gp = scanGamepads();
+        // Request animation frame loop for smooth real-time updates
+        function updateJoystickLoop() {
+            if (!gamepad) {
+                animationFrameId = null;
+                return;
+            }
             
-            if (!gp) return;
+            const gp = navigator.getGamepads()[gamepad.index];
+            if (!gp) {
+                animationFrameId = requestAnimationFrame(updateJoystickLoop);
+                return;
+            }
             
-            // Read axes
-            const xAxis = gp.axes[0];  // Left/Right
-            const yAxis = gp.axes[1];  // Forward/Backward
-            const throttle = gp.axes[3];  // Throttle (usually -1 to 1)
-            
-            // Update display
-            updateAxisDisplay('x', xAxis);
-            updateAxisDisplay('y', yAxis);
-            updateThrottleDisplay(throttle);
+            // Get axes
+            let x = gp.axes[0];  // Left/Right
+            let y = gp.axes[1];  // Forward/Backward
+            let throttle = gp.axes[3];  // Throttle
             
             // Apply deadzone
-            const x = Math.abs(xAxis) > DEADZONE ? xAxis : 0;
-            const y = Math.abs(yAxis) > DEADZONE ? yAxis : 0;
+            x = Math.abs(x) < DEADZONE ? 0 : x;
+            y = Math.abs(y) < DEADZONE ? 0 : y;
             
-            // Convert throttle from -1..1 to 0..1
+            // Update visual displays
+            updateAxisDisplay('x', x);
+            updateAxisDisplay('y', y);
+            updateAxisDisplay('throttle', throttle);
+            
+            // Normalize throttle from -1..1 to 0..1
             const throttleNorm = (throttle + 1) / 2;
             
-            // Calculate speed (0 to MAX_SPEED based on throttle)
+            // Update throttle display
+            document.getElementById('throttleBar').style.width = (throttleNorm * 100) + '%';
+            document.getElementById('throttleValue').textContent = Math.floor(throttleNorm * 100) + '%';
+            
+            // Calculate speed
             const speed = Math.floor(throttleNorm * MAX_SPEED);
             
             // Update speed display
             document.getElementById('speedBar').style.width = (throttleNorm * 100) + '%';
             document.getElementById('speedValue').textContent = speed;
             
-            // Determine command based on joystick position
+            // Calculate command
             const command = calculateMotorCommand(x, y, speed);
             
-            // Compare commands by value, not reference
+            // Throttle command sending (but check every frame)
+            const now = Date.now();
+            const timeSinceLastCommand = now - lastCommandTime;
+            
+            // Compare state by JSON string
             const commandStr = JSON.stringify(command);
             const currentStateStr = JSON.stringify(currentMotorState);
             
-            // Only send if state actually changed (not just time passed)
-            if (!commandInProgress && commandStr !== currentStateStr) {
+            // Send if state changed AND enough time passed since last command
+            if (commandStr !== currentStateStr && timeSinceLastCommand >= COMMAND_THROTTLE_MS) {
                 sendMotorCommand(command);
-                lastCommand = command;
-                lastUpdate = Date.now();
+                lastCommandTime = now;
             }
+            
+            // Request next frame
+            animationFrameId = requestAnimationFrame(updateJoystickLoop);
         }
         
         // Calculate motor command from joystick input
@@ -495,90 +519,51 @@
             return { type: 'stop' };
         }
         
-        // Send motor command to RPi
+        // Send motor command to RPi - single atomic command
         function sendMotorCommand(command) {
             if (!ws || ws.readyState !== WebSocket.OPEN) return;
-            if (commandInProgress) return;  // Prevent command pileup
             
-            commandInProgress = true;
-            
-            // Convert joystick command to Teensy serial commands
+            // Send single compound command
             if (command.type === 'forward') {
-                // Batch commands with small delays
-                sendCommand(`SPEED:${Math.round(command.speed)}`);
-                setTimeout(() => sendCommand('FORWARD'), 10);
-                setTimeout(() => sendCommand('RUN'), 20);
-                
+                sendCommand(`MOVE:FORWARD:${Math.round(command.speed)}`);
                 currentMotorState = { type: 'forward', speed: command.speed };
-                stopSent = false;
                 
                 document.getElementById('direction').textContent = 'FORWARD';
                 document.getElementById('currentSpeed').textContent = Math.round(command.speed);
                 
             } else if (command.type === 'backward') {
-                sendCommand(`SPEED:${Math.round(command.speed)}`);
-                setTimeout(() => sendCommand('BACKWARD'), 10);
-                setTimeout(() => sendCommand('RUN'), 20);
-                
+                sendCommand(`MOVE:BACKWARD:${Math.round(command.speed)}`);
                 currentMotorState = { type: 'backward', speed: command.speed };
-                stopSent = false;
                 
                 document.getElementById('direction').textContent = 'BACKWARD';
                 document.getElementById('currentSpeed').textContent = Math.round(command.speed);
                 
             } else if (command.type === 'spin') {
-                if (command.direction === 'left') {
-                    sendCommand(`SPIN:LEFT:${Math.round(command.speed)}`);
-                } else {
-                    sendCommand(`SPIN:RIGHT:${Math.round(command.speed)}`);
-                }
-                
+                const dir = command.direction.toUpperCase();
+                sendCommand(`SPIN:${dir}:${Math.round(command.speed)}`);
                 currentMotorState = { type: 'spin', direction: command.direction, speed: command.speed };
-                stopSent = false;
                 
-                document.getElementById('direction').textContent = 'SPIN ' + command.direction.toUpperCase();
+                document.getElementById('direction').textContent = 'SPIN ' + dir;
                 document.getElementById('currentSpeed').textContent = Math.round(command.speed);
                 
             } else if (command.type === 'differential') {
-                // Differential steering with individual motor speeds
                 const leftSpeed = Math.round(command.leftSpeed);
                 const rightSpeed = Math.round(command.rightSpeed);
+                const dir = command.direction.toUpperCase();
                 
-                sendCommand(`M1:SPEED:${leftSpeed}`);
-                setTimeout(() => sendCommand(`M2:SPEED:${rightSpeed}`), 10);
-                
-                if (command.direction === 'forward') {
-                    setTimeout(() => sendCommand('M1:FORWARD'), 20);
-                    setTimeout(() => sendCommand('M2:FORWARD'), 30);
-                } else {
-                    setTimeout(() => sendCommand('M1:BACKWARD'), 20);
-                    setTimeout(() => sendCommand('M2:BACKWARD'), 30);
-                }
-                
-                setTimeout(() => sendCommand('RUN'), 40);
-                
+                sendCommand(`DIFF:${dir}:${leftSpeed}:${rightSpeed}`);
                 currentMotorState = { type: 'differential', direction: command.direction, leftSpeed, rightSpeed };
-                stopSent = false;
                 
-                document.getElementById('direction').textContent = 'DIFF ' + command.direction.toUpperCase();
+                document.getElementById('direction').textContent = 'DIFF ' + dir;
                 document.getElementById('currentSpeed').textContent = Math.round((leftSpeed + rightSpeed) / 2);
                 
             } else if (command.type === 'stop') {
-                // Only send STOP once when transitioning from moving to stopped
-                if (!stopSent) {
-                    sendCommand('STOP');
-                    stopSent = true;
-                    currentMotorState = { type: 'stop', speed: 0 };
-                    
-                    document.getElementById('direction').textContent = 'STOPPED';
-                    document.getElementById('currentSpeed').textContent = 0;
-                }
+                sendCommand('STOP');
+                currentMotorState = { type: 'stop', speed: 0 };
+                
+                document.getElementById('direction').textContent = 'STOPPED';
+                document.getElementById('currentSpeed').textContent = 0;
             }
-            
-            // Release lock after enough time for all commands to be sent
-            setTimeout(() => {
-                commandInProgress = false;
-            }, 100);
         }
         
         // Update axis display
@@ -626,8 +611,8 @@
         window.addEventListener('load', () => {
             connectWebSocket();
             
-            // Start joystick polling
-            setInterval(processJoystick, 50);  // 20Hz update rate
+            // Start gamepad scanning (not the animation loop yet)
+            setInterval(scanGamepads, 1000);  // Check for gamepad connection every second
             
             // Listen for gamepad connection events
             window.addEventListener('gamepadconnected', (e) => {

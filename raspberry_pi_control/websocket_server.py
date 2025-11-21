@@ -105,11 +105,19 @@ class JoystickServer:
                 # Direct serial command
                 command = data.get('command')
                 logger.info(f"Direct command: {command}")
-                response = await asyncio.to_thread(self.controller.send_command, command)
+                
+                # Handle compound commands for smooth real-time control
+                if command.startswith('MOVE:'):
+                    await self.handle_move_command(command)
+                elif command.startswith('DIFF:'):
+                    await self.handle_diff_command(command)
+                else:
+                    # Send direct command to Teensy
+                    response = await asyncio.to_thread(self.controller.send_command, command)
                 
                 await websocket.send(json.dumps({
                     'type': 'response',
-                    'message': response or 'Command sent'
+                    'message': 'Command sent'
                 }))
             
             elif msg_type == 'motor_control':
@@ -195,6 +203,55 @@ class JoystickServer:
                 'type': 'error',
                 'message': f"Motor control error: {str(e)}"
             }))
+    
+    async def handle_move_command(self, command: str):
+        """Handle compound MOVE commands: MOVE:FORWARD:5000 or MOVE:BACKWARD:3000"""
+        try:
+            parts = command.split(':')
+            if len(parts) != 3:
+                logger.error(f"Invalid MOVE command format: {command}")
+                return
+            
+            _, direction, speed = parts
+            speed = int(speed)
+            
+            # Send atomically to Teensy
+            await asyncio.to_thread(self.controller.send_command, f"SPEED:{speed}")
+            await asyncio.to_thread(self.controller.send_command, direction.upper())
+            await asyncio.to_thread(self.controller.send_command, "RUN")
+            
+            current_state['speed'] = speed
+            current_state['direction'] = direction.upper()
+            logger.debug(f"Move {direction} at {speed} steps/sec")
+            
+        except Exception as e:
+            logger.error(f"Error in handle_move_command: {e}")
+    
+    async def handle_diff_command(self, command: str):
+        """Handle differential steering: DIFF:FORWARD:4000:6000 or DIFF:BACKWARD:3000:5000"""
+        try:
+            parts = command.split(':')
+            if len(parts) != 4:
+                logger.error(f"Invalid DIFF command format: {command}")
+                return
+            
+            _, direction, left_speed, right_speed = parts
+            left_speed = int(left_speed)
+            right_speed = int(right_speed)
+            
+            # Send atomically to Teensy
+            await asyncio.to_thread(self.controller.send_command, f"M1:SPEED:{left_speed}")
+            await asyncio.to_thread(self.controller.send_command, f"M2:SPEED:{right_speed}")
+            await asyncio.to_thread(self.controller.send_command, f"M1:{direction.upper()}")
+            await asyncio.to_thread(self.controller.send_command, f"M2:{direction.upper()}")
+            await asyncio.to_thread(self.controller.send_command, "RUN")
+            
+            current_state['speed'] = int((left_speed + right_speed) / 2)
+            current_state['direction'] = f"DIFF {direction.upper()}"
+            logger.debug(f"Diff {direction}: L={left_speed}, R={right_speed}")
+            
+        except Exception as e:
+            logger.error(f"Error in handle_diff_command: {e}")
     
     async def broadcast_status(self):
         """Broadcast current status to all connected clients"""
